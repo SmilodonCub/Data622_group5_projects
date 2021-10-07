@@ -1,0 +1,311 @@
+---
+title: "Homework 3 Data 622 Section 2 Group 5"
+author: "Bonnie Cooper, Orli Khaimova, Leo Yi"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: yes
+    toc_depth: 4
+    toc_float: yes
+    number_sections: no
+    theme: paper
+    highlight: tango
+    font-family: Consolas
+  pdf_document:
+    toc: yes
+---
+
+```{=html}
+<style type="text/css">
+
+code {
+  font-family: "Consolas";
+  font-size: 11px;
+}
+
+pre {
+  font-family: "Consolas";
+  font-size: 11px;
+}
+
+mark {
+  background-color: whitesmoke;
+  color: black;
+}
+
+</style>
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = T, warning = F, message = F, fig.width = 10)
+
+options(scipen = 9)
+
+```
+
+<font size="5">Loan Approval Status</font>
+
+We will be working with a dataset of loan approval status information. The task is to develop models to predict loan approval status with the given feature variables. After a preliminary exploratory data analysis, we will fit Linear Discriminant, K-Nearest Neighbors, Decision Trees and Random Forest models to a subset of the data and evaluate performance on a hold-out data set.
+
+### Import Data
+
+To begin, the following code will import the necessary libraries and import the data:
+
+```{r import}
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+library(VIM)
+library(corrplot)
+library(purrr)
+library(scales)
+library(caret)
+
+# import data
+url <- 'https://raw.githubusercontent.com/SmilodonCub/DATA622/master/Loan_approval.csv'
+df <- read.csv(url)
+
+# convert column names to lowercase
+names(df) <- lapply(names(df), tolower)
+
+# quick look at what the data structure looks like
+glimpse(df)
+
+# summary of each field
+summary(df)
+
+# remove loan ID
+df <- df %>%
+  select(-loan_id)
+```
+
+```{r function, echo = F}
+
+plot_corr_matrix <- function(dataframe, significance_threshold){
+  title <- paste0('Correlation Matrix for significance > ',
+                  significance_threshold)
+  
+  df_cor <- dataframe %>% mutate_if(is.character, as.factor)
+  
+  df_cor <- df_cor %>% mutate_if(is.factor, as.numeric)
+  #run a correlation and drop the insignificant ones
+  corr <- cor(df_cor)
+  #prepare to drop duplicates and correlations of 1     
+  corr[lower.tri(corr,diag=TRUE)] <- NA 
+  #drop perfect correlations
+  corr[corr == 1] <- NA 
+  #turn into a 3-column table
+  corr <- as.data.frame(as.table(corr))
+  #remove the NA values from above 
+  corr <- na.omit(corr) 
+  #select significant values  
+  corr <- subset(corr, abs(Freq) > significance_threshold) 
+  #sort by highest correlation
+  corr <- corr[order(-abs(corr$Freq)),] 
+  #print table
+  # print(corr)
+  #turn corr back into matrix in order to plot with corrplot
+  mtx_corr <- reshape2::acast(corr, Var1~Var2, value.var="Freq")
+  
+  #plot correlations visually
+  corrplot(mtx_corr,
+           title=title,
+           mar=c(0,0,1,0),
+           method='color', 
+           tl.col="black", 
+           na.label= " ",
+           addCoef.col = 'black',
+           number.cex = .9)
+}
+
+```
+
+### Missing Values
+
+```{r missing values, results = F}
+VIM::aggr(df, 
+          col=c('green','red'), 
+          numbers = T, 
+          sortVars = T,
+          cex.axis = .5,
+          ylab=c("Proportion of Data", "Combinations and Percentiles")
+          )
+```
+
+- `credit_history` has ~8% missing values. 
+- `loanamount` has ~4% missing values.
+- `loan_amount_term` has ~2% missing values.
+
+Before any analysis and based on common knowledge, it would be a fair guess to expect these three variables to have considerable influence for any loan approval status.
+
+### Correlation Plot
+
+```{r corrplot, fig.height = 8}
+
+plot_corr_matrix(df, -1)
+
+```
+
+### Distributions of Numeric Variables
+
+```{r}
+
+# numeric distributions
+df %>%
+  select_if(is.numeric) %>%
+  bind_cols(select(df, loan_status)) %>%
+  gather(var, val, -loan_status) %>%
+  ggplot(aes(x = val, fill = loan_status)) +
+  geom_density(alpha = .3) +
+  facet_wrap(~var, scales = 'free') +
+  theme_bw() + 
+  labs(x = element_blank(),
+       y = element_blank(),
+       title = 'Distribution of Numeric Variables by Loan Approval Status'
+       )
+
+```
+
+Credit history seems to have a clear affect on loan approval status, with credit history meeting fully meeting guidelines showing higher rates of approvals.
+
+### Distributions of Categorical Variables
+
+```{r}
+
+# df %>%
+#   select_if(negate(is.numeric)) %>%
+#   gather(var, value, -loan_status) %>%
+#   ggplot(aes(x = value, fill = loan_status)) +
+#   geom_bar(position = 'dodge') +
+#   facet_wrap(~var, scales = 'free')
+
+yes_count <- sum(df$loan_status == 'Y')
+no_count <- sum(df$loan_status == 'N')
+  
+df %>%
+  select_if(negate(is.numeric)) %>%
+  gather(var, value, -loan_status) %>%
+  group_by(var, value, loan_status) %>%
+  summarize(count = n(),
+            .groups = 'drop') %>%
+  mutate(prop = count / ifelse(loan_status == 'Y', yes_count, no_count)) %>%
+  ggplot(aes(x = value, y = prop, fill = loan_status)) +
+  geom_col(position = 'dodge') +
+  facet_wrap(~var, scales = 'free') +
+  theme_bw() +
+  labs(y = 'Frequency Proportion',
+       x = element_blank(),
+       title = 'Frequency Distributions For Non-Numeric Variables') +
+  scale_y_continuous(labels = percent_format(accuracy = 1))
+
+```
+
+### Data Prep
+
+```{r data prep}
+# impute NA
+preproc <- preProcess(df, 'bagImpute')
+df2 <- predict(preproc, df)
+
+# train test split
+set.seed(101)
+trainIndex <- createDataPartition(df2$loan_status,
+                                  p = 0.75,
+                                  list = F)
+
+train <- df2[trainIndex,]
+test <- df2[-trainIndex,]
+
+# cross validation train control
+ctrl <- trainControl(method = 'cv', number = 10)
+```
+
+
+### LDA
+
+```{r lda}
+
+lda <- train(loan_status ~ .,
+             data = train,
+             method = 'lda',
+             trControl = ctrl
+             )
+
+lda
+```
+
+### KNN
+
+```{r knn}
+
+knn <- train(loan_status ~ .,
+             data = train,
+             method = 'knn',
+             trControl = ctrl
+             )
+
+knn
+
+```
+
+### Decision Tree
+
+```{r decision trees}
+
+cart <- train(loan_status ~ .,
+              data = train,
+              method = 'rpart',
+              trControl = ctrl
+              )
+
+cart
+
+```
+
+### Random Forest
+
+```{r random forest}
+
+rf <- train(loan_status ~ .,
+            data = train,
+            method = 'rf',
+            trControl = ctrl
+            )
+
+rf
+
+```
+
+### Confusion Matrix
+
+```{r confusion matrix}
+# calculate jpredictions
+test$lda <- predict(lda, test)
+test$knn <- predict(knn, test)
+test$cart <- predict(cart, test)
+test$rf <- predict(rf, test)
+
+table(test$loan_status, test$lda, dnn = c('approval status','LDA predictions'))
+table(test$loan_status, test$knn, dnn = c('approval status','KNN predictions'))
+table(test$loan_status, test$cart, dnn = c('approval status','CART predictions'))
+table(test$loan_status, test$rf, dnn = c('approval status','RF predictions'))
+```
+
+### Comparison of Model Accuracy
+
+```{r}
+# model accuracy table
+data.frame(accuracy = rbind(
+  sum(test$loan_status == test$lda) / nrow(test),
+  sum(test$loan_status == test$knn) / nrow(test),
+  sum(test$loan_status == test$cart) / nrow(test),
+  sum(test$loan_status == test$rf) / nrow(test)
+),
+  row.names = c('LDA',
+                'KNN',
+                'CART', 
+                'Random Forest'
+                )
+)
+```
+
