@@ -149,23 +149,75 @@ df <- df[count_na < 2,]
 dim( df )
 ```
 
-For a simple first approximation, we will use the `simputation` package to fill NA values for categorical and numeric features with 'hot-deck' imputation (i.e. a values pulled at random with replacement from complete values for the feature).
+For a simple first approximation, we will use the `simputation` package$^1$ to fill NA values for categorical and numeric features with 'hot-deck' imputation (i.e. a values pulled at random from complete cases in the dataset).
 ```{r}
-df_median <- bind_shadow( df ) %>%
-  impute_median_at() %>%
-  add_label_shadow()
+# single imputation analysis
+df <- bind_shadow( df ) %>%
+  data.frame() %>%
+  simputation::impute_rhd(., credit_history ~ 1 ) %>%
+  simputation::impute_rhd(., loan_amount_term ~ 1 ) %>%
+  simputation::impute_rhd(., loanamount ~ 1 ) %>%
+  simputation::impute_rhd(., self_employed ~ 1 ) %>%
+  simputation::impute_rhd(., gender ~ 1 ) %>%
+  simputation::impute_rhd(., dependents ~ 1 ) %>%  
+  tbl_df()  %>%
+  select( -c(13:24) )
 ```
 
 
+Confirm that we have filled all `NA` values:
 ```{r}
 # return a summary table of the missing data in each column
-miss_var_summary(df_median)
+miss_var_summary(df)
 ```
 
-### Correlation Plot
+### Distributions of Numeric Variables
 
-We can 
+Now that the missing values have been imputed across the dataframe, we can explore the relationships of the variables in more depth. To start we visualize the distributions of the numeric variables grouped by the outcome of the target variable (`loan_status`): 
 
+```{r}
+# numeric distributions
+df %>%
+  select(applicantincome, coapplicantincome, loanamount ) %>%
+  bind_cols(select(df, loan_status)) %>%
+  gather(var, val, -loan_status) %>%
+  ggplot(aes(x = val, fill = loan_status)) +
+  geom_density(alpha = .3) +
+  facet_wrap(~var, scales = 'free', ncol = 2) +
+  theme_bw() + 
+  labs(x = element_blank(),
+       y = element_blank(),
+       title = 'Distribution of Numeric Variables by Loan Approval Status'
+       )
+
+```
+The distributions do not suggest any obviously significant differences when grouped by the target variable for any of the numeric features. It does not appear to be likely that either of these 3 features are correlated to `loan_status`. This can be confirmed with ANOVA$^2$:
+
+```{r}
+# ANOVA for applicantincome
+applicantincome.aov <- aov(applicantincome ~ loan_status, data = df)
+# Summary of the analysis
+summary(applicantincome.aov)
+```
+```{r}
+# ANOVA for coapplicantincome
+coapplicantincome.aov <- aov(coapplicantincome ~ loan_status, data = df)
+# Summary of the analysis
+summary(coapplicantincome.aov)
+```
+
+```{r}
+# ANOVA for applicantincome
+loanamount.aov <- aov(loanamount ~ loan_status, data = df)
+# Summary of the analysis
+summary(loanamount.aov)
+```
+The p-values for all three ANOVA tests are very high indicating that there is no significant relationship between the features variables and the target.
+
+
+### Correlation of Numeric Variables
+
+Here we can look for correlations between feature variables
 ```{r function, echo = F}
 
 plot_corr_matrix <- function(dataframe, significance_threshold){
@@ -209,48 +261,24 @@ plot_corr_matrix <- function(dataframe, significance_threshold){
 
 ```{r corrplot, fig.height = 8}
 
-plot_corr_matrix(df, -1)
+df_numeric <- df %>%
+  select(applicantincome, coapplicantincome, loanamount )
 
+plot_corr_matrix(df_numeric, -1)
 ```
+We can see a strong positive correlation between the features `applicantincome` and `loanamount`. There is a weak positive correlation between `coapplicantincome` and `loanamount`. Interestingly there is a weak negative correlation between `applicantincome` and `coapplicantincome`; presumptively due to a high-earning family being able to sustain with a single income.
 
-### Distributions of Numeric Variables
-
-```{r}
-
-# numeric distributions
-df %>%
-  select_if(is.numeric) %>%
-  bind_cols(select(df, loan_status)) %>%
-  gather(var, val, -loan_status) %>%
-  ggplot(aes(x = val, fill = loan_status)) +
-  geom_density(alpha = .3) +
-  facet_wrap(~var, scales = 'free') +
-  theme_bw() + 
-  labs(x = element_blank(),
-       y = element_blank(),
-       title = 'Distribution of Numeric Variables by Loan Approval Status'
-       )
-
-```
-
-Credit history seems to have a clear affect on loan approval status, with credit history meeting fully meeting guidelines showing higher rates of approvals.
 
 ### Distributions of Categorical Variables
 
+No we turn to the categorical features to see if there are any strong relationships between them and the target variable.  
+The following code will visualize the proportions of each target variable level for each level of a given feature:
 ```{r}
-
-# df %>%
-#   select_if(negate(is.numeric)) %>%
-#   gather(var, value, -loan_status) %>%
-#   ggplot(aes(x = value, fill = loan_status)) +
-#   geom_bar(position = 'dodge') +
-#   facet_wrap(~var, scales = 'free')
-
 yes_count <- sum(df$loan_status == 'Y')
 no_count <- sum(df$loan_status == 'N')
   
 df %>%
-  select_if(negate(is.numeric)) %>%
+  select(-applicantincome, -coapplicantincome, -loanamount ) %>%
   gather(var, value, -loan_status) %>%
   group_by(var, value, loan_status) %>%
   summarise(count = n(),
@@ -267,12 +295,62 @@ df %>%
 
 ```
 
+When interpreting the categorical bar plots, differences between `loan_status` for a given feature-level suggest that a relationship exists between a feature and the target variable. For example, we see a clear difference between the Y/N bars for `credit_history`, `married` and `property_area` whereas the is little difference for the levels of `gender` and no noticeable difference for `self_employed`.  
+
+The existence of a significant relationship between the categorical features and the target variable can be evaluated with a Chi-square test$^3$.
+
+```{r}
+# Chi-square test for credit_history
+test <- chisq.test(table(df$credit_history, df$loan_status))
+test
+```
+```{r}
+# Chi-square test for married
+test <- chisq.test(table(df$married, df$loan_status))
+test
+```
+```{r}
+# Chi-square test for property_area
+test <- chisq.test(table(df$property_area, df$loan_status))
+test
+```
+
+```{r}
+# Chi-square test for education
+test <- chisq.test(table(df$education, df$loan_status))
+test
+```
+```{r}
+# Chi-square test for loan_amount_term
+test <- chisq.test(table(df$loan_amount_term, df$loan_status))
+test
+```
+```{r}
+# Chi-square test for dependents
+test <- chisq.test(table(df$dependents, df$loan_status))
+test
+```
+```{r}
+# Chi-square test for gender
+test <- chisq.test(table(df$gender, df$loan_status))
+test
+```
+
+```{r}
+# Chi-square test for self employed
+test <- chisq.test(table(df$self_employed, df$loan_status))
+test
+```
+
+
 ### Data Prep
 
 ```{r data prep}
-# impute NA
-preproc <- preProcess(df, 'bagImpute')
-df2 <- predict(preproc, df)
+# impute NA  daaaang!, sorry Leo, I didn't see that you impute the NAs here until too late
+# preproc <- preProcess(df, 'bagImpute')
+# df2 <- predict(preproc, df)
+df2 <- df %>%
+  select( married, property_area, credit_history, education, loan_amount_term, loan_status )
 
 # train test split
 set.seed(101)
@@ -378,7 +456,12 @@ data.frame(accuracy = rbind(
 )
 ```
 
+
+
 ## References
 
+1. [Dealing with Missingness: Single Imputation](https://thomaselove.github.io/432-notes/dealing-with-missingness-single-imputation.html#single-imputation)  
+2. [ANOVA test with `R`](http://www.sthda.com/english/wiki/one-way-anova-test-in-r)
+3. [Chi-squared test of independence in `R`](https://statsandr.com/blog/chi-square-test-of-independence-in-r/)
 
 <br><br>
