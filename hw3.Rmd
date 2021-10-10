@@ -1,5 +1,6 @@
 ---
-title: "Homework 3 Data 622 Section 2 Group 5"
+title: "Loan Approval Status"
+subtitle: "Homework 3 Data 622 Section 2 Group 5"
 author: "Bonnie Cooper, Orli Khaimova, Leo Yi"
 date: "`r Sys.Date()`"
 output:
@@ -42,14 +43,15 @@ knitr::opts_chunk$set(echo = T, warning = F, message = F, fig.width = 10)
 options(scipen = 9)
 
 ```
+<br>
 
-<font size="5">Loan Approval Status</font>
+## Introduction
 
 We will be working with a dataset of loan approval status information. The task is to develop models to predict loan approval status with the given feature variables. After a preliminary exploratory data analysis, we will fit Linear Discriminant, K-Nearest Neighbors, Decision Trees and Random Forest models to a subset of the data and evaluate performance on a hold-out data set.
 
 ### Import Data
 
-To begin, the following code will import the necessary libraries and import the data:
+To begin, the following code will import the data necessary libraries and import the dat:
 
 ```{r import}
 library(tidyr)
@@ -60,24 +62,109 @@ library(corrplot)
 library(purrr)
 library(scales)
 library(caret)
+library(Hmisc)
+library(naniar)
 
 # import data
 url <- 'https://raw.githubusercontent.com/SmilodonCub/DATA622/master/Loan_approval.csv'
-df <- read.csv(url)
+df <- read.csv(url, header=T, na.strings="")
+```
+<br>
 
+## Exploratory Data Analysis
+
+The following code will quantitatively and visually explore the nature of the loan approval dataset.  
+We begin by describing the dataset features:
+```{r}
 # convert column names to lowercase
 names(df) <- lapply(names(df), tolower)
+names(df)
+```
 
+Use `dplyr`'s `glimpse()` function to take a quick look at the data structure. Followed by `Hmisc`'s `describe()` function to return some basic summary statistics about the dataframe features:
+```{r}
 # quick look at what the data structure looks like
 glimpse(df)
+```
 
+```{r}
 # summary of each field
-summary(df)
+describe(df)
+```
 
+From this output, we can summarize each dataset feature as follows:  
+
+1. `loan_id` (ordinal): each entry is a unique value, therefore this feature is not informative for loan status
+2. `gender` (categorical): 2 distinct values with missing data
+3. `married` (categorical):  2 distinct values with missing data
+4. `dependents` (categorical):  4 distinct values with missing data
+5. `education` (categorical):  2 distinct values, no missing data
+6. `self_employed` (categorical):  2 distinct values with missing data
+7. `applicantincome` (numeric): value range, no missing data
+8. `coapplicantincome` (numeric): value range, no missing data
+9. `loanamount` (numeric): value range with missing data
+10. `loan_amount_term` (numeric): relatively few unique values (10) with missing data 
+11. `credit_history` (categorical): 2 distinct values with missing data
+12. `property_area` (categorical): 3 distinct values, no missing data
+13. `loan_status` (categorical): 2 distinct values, no missing data
+
+Removing `loan_id`: this feature was found to have as many unique values as there are rows in the dataframe and is a record identification label. Therefore, we will drop this feature from the data:
+```{r}
 # remove loan ID
 df <- df %>%
   select(-loan_id)
 ```
+
+
+### Missing Values
+
+Use `naniar`'s `miss_var_summary()` and `vis_miss()` functions to summarize and visualize the missing values in the features of the dataset:
+```{r}
+# return a summary table of the missing data in each column
+miss_var_summary(df)
+```
+
+
+```{r}
+# visualize the amount of missing data for each feature
+vis_miss( df, cluster = TRUE )
+```
+
+The figure above shows a grouped view of the missing values in each feature column. Overall, 2% of the values are missing from the dataset. Several features have no missing values (`education`, `applicantincome`, and `coapplicantincome`). Many of the features have relatively few missing values. However, the `credit_history` features is missing 8.14% of the data.
+
+Explore the missing data further by using the `gg_miss_upset()` function to show patterns correlated missing values.
+```{r}
+gg_miss_upset( df )
+```
+
+The figure above shows that the vast majority of rows only have a singleton missing value; this is represented by the 5 bars in the left of the plot with only one dot to indicate the missing feature. However, a small minority or rows have 2-3 missing elements; this is indicated by multiple dots under the 5 bars to the right side of the plot.  
+
+Since there are relatively few rows with multiple missing values, it would not adversely affect the analysis to remove them. The rest of the missing values can be dealt with by imputation. 
+
+```{r}
+# create a vector holding the sum of NAs for each row
+count_na <- apply( df, 1, function(x) sum(is.na(x)))
+# keep only the rows with less than 2 missing values
+df <- df[count_na < 2,]
+dim( df )
+```
+
+For a simple first approximation, we will use the `simputation` package to fill NA values for categorical and numeric features with 'hot-deck' imputation (i.e. a values pulled at random with replacement from complete values for the feature).
+```{r}
+df_median <- bind_shadow( df ) %>%
+  impute_median_at() %>%
+  add_label_shadow()
+```
+
+
+```{r}
+# return a summary table of the missing data in each column
+miss_var_summary(df_median)
+```
+
+### Correlation Plot
+
+We can 
 
 ```{r function, echo = F}
 
@@ -119,26 +206,6 @@ plot_corr_matrix <- function(dataframe, significance_threshold){
 }
 
 ```
-
-### Missing Values
-
-```{r missing values, results = F}
-VIM::aggr(df, 
-          col=c('green','red'), 
-          numbers = T, 
-          sortVars = T,
-          cex.axis = .5,
-          ylab=c("Proportion of Data", "Combinations and Percentiles")
-          )
-```
-
-- `credit_history` has ~8% missing values. 
-- `loanamount` has ~4% missing values.
-- `loan_amount_term` has ~2% missing values.
-
-Before any analysis and based on common knowledge, it would be a fair guess to expect these three variables to have considerable influence for any loan approval status.
-
-### Correlation Plot
 
 ```{r corrplot, fig.height = 8}
 
@@ -186,7 +253,7 @@ df %>%
   select_if(negate(is.numeric)) %>%
   gather(var, value, -loan_status) %>%
   group_by(var, value, loan_status) %>%
-  summarize(count = n(),
+  summarise(count = n(),
             .groups = 'drop') %>%
   mutate(prop = count / ifelse(loan_status == 'Y', yes_count, no_count)) %>%
   ggplot(aes(x = value, y = prop, fill = loan_status)) +
@@ -221,7 +288,7 @@ ctrl <- trainControl(method = 'cv', number = 10)
 ```
 
 
-### LDA
+## LDA
 
 ```{r lda}
 
@@ -234,7 +301,7 @@ lda <- train(loan_status ~ .,
 lda
 ```
 
-### KNN
+## KNN
 
 ```{r knn}
 
@@ -248,7 +315,7 @@ knn
 
 ```
 
-### Decision Tree
+## Decision Tree
 
 ```{r decision trees}
 
@@ -262,7 +329,7 @@ cart
 
 ```
 
-### Random Forest
+## Random Forest
 
 ```{r random forest}
 
@@ -275,6 +342,8 @@ rf <- train(loan_status ~ .,
 rf
 
 ```
+
+## Model Performance
 
 ### Confusion Matrix
 
@@ -309,3 +378,7 @@ data.frame(accuracy = rbind(
 )
 ```
 
+## References
+
+
+<br><br>
