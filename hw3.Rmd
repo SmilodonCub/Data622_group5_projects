@@ -434,16 +434,23 @@ table(test$loan_status, test$rf, dnn = c('approval status','RF predictions'))
 
 ### Comparison of Model Accuracy
 
-The confusion matrices show the results on the test data which can be used to calculate an accuracy score. However, to build a more robust estimate of each model's accuracy, we will bootstrap the result by directly calling the `resamples()` function
+The confusion matrices show the results on the test data which can be used to calculate an accuracy score. However, to build a more robust estimate of each model's accuracy, we will collect metrics from multiple fits of the model. This is made very simple with a call to caret's `resamples()` function
 
 ```{r}
 results <- resamples(list(LDA = lda,  DT = cart, kNN = knn, RF = rf))
+summary( results )
+```
+From the output above, we will focus on the Accuracy measure to chose the best model of the four. We see that **Model 1: LDA** has the highest mean & median accuracy score.  
+
+We can visualize this outcome with ggplot:  
+
+```{r}
 ggplot(results) + 
   labs(y = "Accuracy") + 
   theme_linedraw()
 ```
 
-
+This graph visualizes that, although Model 1: LDA had the highest accuracy, Model 4: Random Field had very similar performance. 
 
 ## References
 
