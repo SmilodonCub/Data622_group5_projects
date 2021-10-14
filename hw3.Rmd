@@ -51,7 +51,7 @@ We will be working with a dataset of loan approval status information. The task 
 
 ### Import Data
 
-To begin, the following code will import the data necessary libraries and import the dat:
+To begin, the following code will import the data and R necessary libraries:
 
 ```{r import}
 library(tidyr)
@@ -64,6 +64,7 @@ library(scales)
 library(caret)
 library(Hmisc)
 library(naniar)
+library(rattle)
 
 # import data
 url <- 'https://raw.githubusercontent.com/SmilodonCub/DATA622/master/Loan_approval.csv'
@@ -108,7 +109,7 @@ From this output, we can summarize each dataset feature as follows:
 12. `property_area` (categorical): 3 distinct values, no missing data
 13. `loan_status` (categorical): 2 distinct values, no missing data
 
-Removing `loan_id`: this feature was found to have as many unique values as there are rows in the dataframe and is a record identification label. Therefore, we will drop this feature from the data:
+Removing `loan_id`: this feature was found to have as many unique values as there are rows in the dataframe. `loan_id` is a record (row) identification label, therefore, we will drop this feature from the data:
 ```{r}
 # remove loan ID
 df <- df %>%
@@ -118,7 +119,7 @@ df <- df %>%
 
 ### Missing Values
 
-Use `naniar`'s `miss_var_summary()` and `vis_miss()` functions to summarize and visualize the missing values in the features of the dataset:
+The output from `describe()` reveals that many of the features have missing values. Here we use `naniar`'s `miss_var_summary()` and `vis_miss()` functions to summarize and visualize the missing values in the features of the dataset:
 ```{r}
 # return a summary table of the missing data in each column
 miss_var_summary(df)
@@ -130,16 +131,16 @@ miss_var_summary(df)
 vis_miss( df, cluster = TRUE )
 ```
 
-The figure above shows a grouped view of the missing values in each feature column. Overall, 2% of the values are missing from the dataset. Several features have no missing values (`education`, `applicantincome`, and `coapplicantincome`). Many of the features have relatively few missing values. However, the `credit_history` features is missing 8.14% of the data.
+The figure above shows a grouped view of the missing values in each feature column. Overall, 2% of the values are missing from the dataset. Several features have no missing values (`education`, `applicantincome`, and `coapplicantincome`). Many of the features have relatively few missing values. However, the `credit_history` is missing 8.14% of the data; a substantial amount.
 
 Explore the missing data further by using the `gg_miss_upset()` function to show patterns correlated missing values.
 ```{r}
 gg_miss_upset( df )
 ```
 
-The figure above shows that the vast majority of rows only have a singleton missing value; this is represented by the 5 bars in the left of the plot with only one dot to indicate the missing feature. However, a small minority or rows have 2-3 missing elements; this is indicated by multiple dots under the 5 bars to the right side of the plot.  
+The figure above shows that the vast majority of rows only have a singleton missing value; this is represented by the 5 bars in the left of the plot with only one dot to indicate the missing feature. However, a small minority or rows have 2-3 missing elements indicated by multiple, connected dots under the 5 bars to the right side of the plot.  
 
-Since there are relatively few rows with multiple missing values, it would not adversely affect the analysis to remove them. The rest of the missing values can be dealt with by imputation. 
+Since there are relatively few rows with multiple missing values, it would not adversely affect the power of the analysis to remove them. Imputation will be used to adress the remaining missing values. 
 
 ```{r}
 # create a vector holding the sum of NAs for each row
@@ -149,7 +150,7 @@ df <- df[count_na < 2,]
 dim( df )
 ```
 
-For a simple first approximation, we will use the `simputation` package$^1$ to fill NA values for categorical and numeric features with 'hot-deck' imputation (i.e. a values pulled at random from complete cases in the dataset).
+For a simple approximation, we will use the `simputation` package$^1$ to fill NA values for categorical and numeric features with 'hot-deck' imputation (i.e. a values pulled at random from complete cases in the dataset).
 ```{r}
 # single imputation analysis
 df <- bind_shadow( df ) %>%
@@ -266,12 +267,12 @@ df_numeric <- df %>%
 
 plot_corr_matrix(df_numeric, -1)
 ```
-We can see a strong positive correlation between the features `applicantincome` and `loanamount`. There is a weak positive correlation between `coapplicantincome` and `loanamount`. Interestingly there is a weak negative correlation between `applicantincome` and `coapplicantincome`; presumptively due to a high-earning family being able to sustain with a single income.
+We can see a strong positive correlation between the features `applicantincome` and `loanamount`. There is a weak positive correlation between `coapplicantincome` and `loanamount`. Interestingly there is a weak negative correlation between `applicantincome` and `coapplicantincome`; presumably due to a high-earning family being able to sustain with a single income.
 
 
 ### Distributions of Categorical Variables
 
-No we turn to the categorical features to see if there are any strong relationships between them and the target variable.  
+No we turn to the categorical features to see if there are any strong relationships with the target variable.  
 The following code will visualize the proportions of each target variable level for each level of a given feature:
 ```{r}
 yes_count <- sum(df$loan_status == 'Y')
@@ -295,62 +296,29 @@ df %>%
 
 ```
 
-When interpreting the categorical bar plots, differences between `loan_status` for a given feature-level suggest that a relationship exists between a feature and the target variable. For example, we see a clear difference between the Y/N bars for `credit_history`, `married` and `property_area` whereas the is little difference for the levels of `gender` and no noticeable difference for `self_employed`.  
+When interpreting the categorical bar plots, differences between `loan_status` for a given feature-level suggest that a relationship exists between a feature and the target variable. For example, we see a clear difference between the Y/N bars for `credit_history`, `married` and `property_area`. However, there is little difference for the levels of `gender` and no noticeable difference for `self_employed`.  
 
 The existence of a significant relationship between the categorical features and the target variable can be evaluated with a Chi-square test$^3$.
 
 ```{r}
-# Chi-square test for credit_history
-test <- chisq.test(table(df$credit_history, df$loan_status))
-test
-```
-```{r}
-# Chi-square test for married
-test <- chisq.test(table(df$married, df$loan_status))
-test
-```
-```{r}
-# Chi-square test for property_area
-test <- chisq.test(table(df$property_area, df$loan_status))
-test
+cat_features <- c( 'self_employed', 'gender', 'dependents', 'loan_amount_term', 'education', 'property_area', 'married', 'credit_history' )
+for(feature in cat_features){print( feature ); print( chisq.test(table(df[[feature]], df$loan_status)))}
 ```
 
-```{r}
-# Chi-square test for education
-test <- chisq.test(table(df$education, df$loan_status))
-test
-```
-```{r}
-# Chi-square test for loan_amount_term
-test <- chisq.test(table(df$loan_amount_term, df$loan_status))
-test
-```
-```{r}
-# Chi-square test for dependents
-test <- chisq.test(table(df$dependents, df$loan_status))
-test
-```
-```{r}
-# Chi-square test for gender
-test <- chisq.test(table(df$gender, df$loan_status))
-test
-```
+From the results of the Chi-square test, only the following features have a statistically significant relation ($\alpha = 0.05$) to the target:  
 
-```{r}
-# Chi-square test for self employed
-test <- chisq.test(table(df$self_employed, df$loan_status))
-test
-```
+* `credit_history`
+* `married`
+* `property_area`
+* `education`
 
+We will move forward using these four features to model `loan_status`.
 
 ### Data Prep
 
 ```{r data prep}
-# impute NA  daaaang!, sorry Leo, I didn't see that you impute the NAs here until too late
-# preproc <- preProcess(df, 'bagImpute')
-# df2 <- predict(preproc, df)
 df2 <- df %>%
-  select( married, property_area, credit_history, education, loan_amount_term, loan_status )
+  select( married, property_area, credit_history, education, loan_status )
 
 # train test split
 set.seed(101)
@@ -368,6 +336,8 @@ ctrl <- trainControl(method = 'cv', number = 10)
 
 ## LDA
 
+**Model 1: Linear Discriminant Analysis** finds a linear combination of features to characterize the separation of target classes. We use the four key features variables that were selected during EDA to build our model (* `credit_history`, `married`, `property_area`, `education`).
+
 ```{r lda}
 
 lda <- train(loan_status ~ .,
@@ -381,19 +351,26 @@ lda
 
 ## KNN
 
+**Model 2: K-Nearest Neighbors** is a non-parametric method used here for classification
+
 ```{r knn}
 
 knn <- train(loan_status ~ .,
              data = train,
              method = 'knn',
-             trControl = ctrl
+             trControl = ctrl,
+             tuneLength = 10
              )
 
 knn
 
 ```
+To tune the hyperparameter 'k', the model tests multiple values (we specify a tune length of 10). The highest accuracy measure that resulted from cross-validation was $k=5$; this value is selected for our final KNN model run with the test data.
+
 
 ## Decision Tree
+
+**Model 3: Decision Tree** is a non-parameteric model that uses simple, branched decision rules to optimise classification.
 
 ```{r decision trees}
 
@@ -406,8 +383,22 @@ cart <- train(loan_status ~ .,
 cart
 
 ```
+```{r}
+#summary( cart )
+```
+
+We can also visualize the resulting decision tree:
+
+```{r}
+fancyRpartPlot(cart$finalModel)
+```
+
+It is interesting that the decision tree does build much depth. Rather, the tree remains shallow using only `credit_history` for classification.
+
 
 ## Random Forest
+
+**Model 4: Random Forest** is an ensemble method that combines multiple decision trees to optimize classification
 
 ```{r random forest}
 
@@ -421,12 +412,15 @@ rf
 
 ```
 
+
 ## Model Performance
 
 ### Confusion Matrix
 
+Visualize example confusion matrix outcomes on the test data set for the four models:
+
 ```{r confusion matrix}
-# calculate jpredictions
+# calculate predictions
 test$lda <- predict(lda, test)
 test$knn <- predict(knn, test)
 test$cart <- predict(cart, test)
@@ -440,20 +434,13 @@ table(test$loan_status, test$rf, dnn = c('approval status','RF predictions'))
 
 ### Comparison of Model Accuracy
 
+The confusion matrices show the results on the test data which can be used to calculate an accuracy score. However, to build a more robust estimate of each model's accuracy, we will bootstrap the result by directly calling the `resamples()` function
+
 ```{r}
-# model accuracy table
-data.frame(accuracy = rbind(
-  sum(test$loan_status == test$lda) / nrow(test),
-  sum(test$loan_status == test$knn) / nrow(test),
-  sum(test$loan_status == test$cart) / nrow(test),
-  sum(test$loan_status == test$rf) / nrow(test)
-),
-  row.names = c('LDA',
-                'KNN',
-                'CART', 
-                'Random Forest'
-                )
-)
+results <- resamples(list(LDA = lda,  DT = cart, kNN = knn, RF = rf))
+ggplot(results) + 
+  labs(y = "Accuracy") + 
+  theme_linedraw()
 ```
 
 
