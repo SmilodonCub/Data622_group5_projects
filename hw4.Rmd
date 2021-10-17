@@ -1,0 +1,448 @@
+---
+title: "Mental Health Survey"
+subtitle: "Homework 3 Data 622 Section 2 Group 5"
+author: "Bonnie Cooper, Orli Khaimova, Leo Yi"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: yes
+    toc_depth: 4
+    toc_float: yes
+    number_sections: no
+    theme: paper
+    highlight: tango
+    font-family: Consolas
+  pdf_document:
+    toc: yes
+---
+
+```{=html}
+<style type="text/css">
+
+code {
+  font-family: "Consolas";
+  font-size: 11px;
+}
+
+pre {
+  font-family: "Consolas";
+  font-size: 11px;
+}
+
+mark {
+  background-color: whitesmoke;
+  color: black;
+}
+
+</style>
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = T, warning = F, message = F, fig.width = 10)
+
+options(scipen = 9)
+
+```
+<br>
+
+## Introduction
+
+We'll be working with a mental health dataset and will be conducting exploratory data analysis, unsupervised clustering, principal component analysis, gradient boosting, and support vector machines.
+
+### Import Data
+
+To begin, the following code will import the data and load the libraries:
+
+```{r import}
+library(stringr)
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+library(VIM)
+library(corrplot)
+library(purrr)
+library(scales)
+library(caret)
+library(Hmisc)
+library(naniar)
+library(conflicted)
+
+# resolve function name conflict
+conflict_prefer('filter', 'dplyr')
+conflict_prefer('summarize', 'dplyr')
+
+# import data
+url <- 'https://raw.githubusercontent.com/SmilodonCub/Data622_group5_projects/main/ADHD_data.csv'
+df <- read.csv(url, header=T, na.strings="")
+
+```
+<br>
+
+## Variable Datatypes
+
+In order to facilitate ease of use, we'll be renaming the columns. Additionally, we'll convert each of the number coded fields to factors while also including the proper labels.
+
+```{r adjust column names}
+
+# convert column names to lowercase
+names(df) <- lapply(names(df), tolower)
+
+# replace periods with underscore
+names(df) <- str_replace_all(names(df), '\\.', '_')
+
+# rename last column to remove trailing underscore
+names(df)[ncol(df)] <- 'psych_meds'
+
+names(df)
+
+```
+
+```{r factor datatype setup}
+
+# Sex
+df$sex <- factor(df$sex, levels = c(1,2), labels = c('Male','Female'))
+
+# Race
+df$race <- factor(df$race, levels = c(1,2,3,4,5,6), labels = c('White','African American','Hispanic','Asian','Native American','Other or Missing Data'))
+
+# ADHD q1 - q18
+adhd_cols <- names(df[,5:22])
+df[adhd_cols] <- lapply(df[adhd_cols], factor, levels = c(0,1,2,3,4), labels = c('Never','Rarely','Sometimes','Often','Very Often')) 
+
+# Mood Disorder q1a - q2
+md_cols <- names(df[,24:37])
+df[md_cols] <- lapply(df[md_cols], factor, levels = c(0,1), labels = c('No','Yes')) 
+
+# Mood Disorder q3
+df$md_q3 <- factor(df$md_q3, levels = c(0,1,2,3), labels = c('No Problem','Minor','Moderate','Serious')) 
+
+# Substance Abuse
+sa_cols <- names(df[,40:45])
+df[sa_cols] <- lapply(df[sa_cols], factor, levels = c(0,1,2,3), labels = c('No Use','Use','Abuse','Dependence')) 
+
+# Court Order
+df$court_order <- factor(df$court_order, levels = c(0,1), labels = c('No','Yes'))
+
+# Education
+# think it might be okay to leave this as a number
+
+# History of Violence, Disorderly Conduct, Suicide Attempt
+hist_cols <- names(df[,48:50])
+df[hist_cols] <- lapply(df[hist_cols], factor, levels = c(0,1), labels = c('No','Yes'))
+
+# Abuse History
+df$abuse <- factor(df$abuse, levels = c(0,1,2,3,4,5,6,7), 
+                   labels = c('No','Physical','Sexual','Emotional','Physical & Sexual','Physical & Emotional','Sexual & Emotional','Physical, Sexual, & Emotional'))
+
+# Non-Substance Related Drugs
+df$non_subst_dx <- factor(df$non_subst_dx, levels = c(0,1,2), labels = c('None','One','More than one'))
+
+# Substance Related Drugs
+df$subst_dx <- factor(df$subst_dx, levels = c(0,1,2,3), labels = c('None','One','Two','Three or more'))
+
+# Psychiatric Meds
+df$psych_meds <- factor(df$psych_meds, levels = c(0,1,2), labels = c('None','One','More than one'))
+
+# str(df)
+
+```
+
+
+## Exploratory Data Analysis
+
+The following code will quantitatively and visually explore the nature of the dataset.  
+
+We begin by describing the dataset features.
+
+Use `dplyr`'s `glimpse()` function to take a quick look at the data structure. Followed by `Hmisc`'s `describe()` function to return some basic summary statistics about the dataframe features:
+
+```{r}
+# quick look at what the data structure looks like
+glimpse(df)
+```
+
+```{r}
+# summary of each field
+describe(df)
+```
+
+From this output, we can summarize each dataset feature as follows:  
+
+1. `loan_id` (ordinal): each entry is a unique value, therefore this feature is not informative for loan status
+2. `gender` (categorical): 2 distinct values with missing data
+3. `married` (categorical):  2 distinct values with missing data
+4. `dependents` (categorical):  4 distinct values with missing data
+5. `education` (categorical):  2 distinct values, no missing data
+6. `self_employed` (categorical):  2 distinct values with missing data
+7. `applicantincome` (numeric): value range, no missing data
+8. `coapplicantincome` (numeric): value range, no missing data
+9. `loanamount` (numeric): value range with missing data
+10. `loan_amount_term` (numeric): relatively few unique values (10) with missing data 
+11. `credit_history` (categorical): 2 distinct values with missing data
+12. `property_area` (categorical): 3 distinct values, no missing data
+13. `loan_status` (categorical): 2 distinct values, no missing data
+
+Removing `loan_id`: this feature was found to have as many unique values as there are rows in the dataframe and is a record identification label. Therefore, we will drop this feature from the data:
+
+```{r}
+# remove loan ID
+# df <- df %>%
+#   select(-loan_id)
+```
+
+
+### Missing Values
+
+Use `naniar`'s `miss_var_summary()` and `vis_miss()` functions to summarize and visualize the missing values in the features of the dataset:
+```{r}
+# return a summary table of the missing data in each column
+miss_var_summary(df)
+```
+
+
+```{r}
+# visualize the amount of missing data for each feature
+vis_miss( df, cluster = TRUE )
+```
+
+The figure above shows a grouped view of the missing values in each feature column. Overall, 2% of the values are missing from the dataset. Several features have no missing values (`education`, `applicantincome`, and `coapplicantincome`). Many of the features have relatively few missing values. However, the `credit_history` features is missing 8.14% of the data.
+
+Explore the missing data further by using the `gg_miss_upset()` function to show patterns correlated missing values.
+
+```{r}
+gg_miss_upset( df )
+```
+
+The figure above shows that the vast majority of rows only have a singleton missing value; this is represented by the 5 bars in the left of the plot with only one dot to indicate the missing feature. However, a small minority or rows have 2-3 missing elements; this is indicated by multiple dots under the 5 bars to the right side of the plot.  
+
+Since there are relatively few rows with multiple missing values, it would not adversely affect the analysis to remove them. The rest of the missing values can be dealt with by imputation. 
+
+```{r}
+# create a vector holding the sum of NAs for each row
+count_na <- apply( df, 1, function(x) sum(is.na(x)))
+# keep only the rows with less than 2 missing values
+df <- df[count_na < 2,]
+dim( df )
+```
+
+For a simple first approximation, we will use the `simputation` package$^1$ to fill NA values for categorical and numeric features with 'hot-deck' imputation (i.e. a values pulled at random from complete cases in the dataset).
+```{r}
+
+# # single imputation analysis
+# df <- bind_shadow( df ) %>%
+#   data.frame() %>%
+#   simputation::impute_rhd(., credit_history ~ 1 ) %>%
+#   simputation::impute_rhd(., loan_amount_term ~ 1 ) %>%
+#   simputation::impute_rhd(., loanamount ~ 1 ) %>%
+#   simputation::impute_rhd(., self_employed ~ 1 ) %>%
+#   simputation::impute_rhd(., gender ~ 1 ) %>%
+#   simputation::impute_rhd(., dependents ~ 1 ) %>%  
+#   tbl_df()  %>%
+#   select( -c(13:24) )
+
+```
+
+
+Confirm that we have filled all `NA` values:
+```{r}
+# return a summary table of the missing data in each column
+miss_var_summary(df)
+
+```
+
+### Distributions of Numeric Variables
+
+Now that the missing values have been imputed across the dataframe, we can explore the relationships of the variables in more depth. To start we visualize the distributions of the numeric variables grouped by the outcome of the target variable (`loan_status`): 
+
+```{r}
+# numeric distributions
+df %>%
+  select_if(is.numeric) %>%
+  bind_cols(select(df, suicide)) %>%
+  gather(var, val, -suicide) %>%
+  ggplot(aes(x = val, fill = suicide)) +
+  geom_density(alpha = .3) +
+  facet_wrap(~var, scales = 'free', ncol = 2) +
+  theme_bw() + 
+  labs(x = element_blank(),
+       y = element_blank(),
+       title = 'Distribution of Numeric Variables'
+       )
+
+```
+The distributions do not suggest any obviously significant differences when grouped by the target variable for any of the numeric features. It does not appear to be likely that either of these 3 features are correlated to `loan_status`. This can be confirmed with ANOVA$^2$:
+
+```{r}
+# # ANOVA for applicantincome
+# applicantincome.aov <- aov(applicantincome ~ loan_status, data = df)
+# # Summary of the analysis
+# summary(applicantincome.aov)
+# ```
+# ```{r}
+# # ANOVA for coapplicantincome
+# coapplicantincome.aov <- aov(coapplicantincome ~ loan_status, data = df)
+# # Summary of the analysis
+# summary(coapplicantincome.aov)
+```
+
+```{r}
+# # ANOVA for applicantincome
+# loanamount.aov <- aov(loanamount ~ loan_status, data = df)
+# # Summary of the analysis
+# summary(loanamount.aov)
+```
+The p-values for all three ANOVA tests are very high indicating that there is no significant relationship between the features variables and the target.
+
+
+### Correlation of Numeric Variables
+
+Here we can look for correlations between feature variables
+```{r function, echo = F}
+
+plot_corr_matrix <- function(dataframe, significance_threshold){
+  title <- paste0('Correlation Matrix for significance > ',
+                  significance_threshold)
+  
+  df_cor <- dataframe %>% mutate_if(is.character, as.factor)
+  
+  df_cor <- df_cor %>% mutate_if(is.factor, as.numeric)
+  #run a correlation and drop the insignificant ones
+  corr <- cor(df_cor)
+  #prepare to drop duplicates and correlations of 1     
+  corr[lower.tri(corr,diag=TRUE)] <- NA 
+  #drop perfect correlations
+  corr[corr == 1] <- NA 
+  #turn into a 3-column table
+  corr <- as.data.frame(as.table(corr))
+  #remove the NA values from above 
+  corr <- na.omit(corr) 
+  #select significant values  
+  corr <- subset(corr, abs(Freq) > significance_threshold) 
+  #sort by highest correlation
+  corr <- corr[order(-abs(corr$Freq)),] 
+  #print table
+  # print(corr)
+  #turn corr back into matrix in order to plot with corrplot
+  mtx_corr <- reshape2::acast(corr, Var1~Var2, value.var="Freq")
+  
+  #plot correlations visually
+  corrplot(mtx_corr,
+           title=title,
+           mar=c(0,0,1,0),
+           method='color', 
+           tl.col="black", 
+           na.label= " ",
+           addCoef.col = 'black',
+           number.cex = .9)
+}
+
+```
+
+```{r corrplot, fig.height = 8}
+
+df_numeric <- df %>%
+  select_if(is.numeric)
+  # select(applicantincome, coapplicantincome, loanamount )
+
+plot_corr_matrix(df_numeric, -1)
+```
+We can see a strong positive correlation between the features `applicantincome` and `loanamount`. There is a weak positive correlation between `coapplicantincome` and `loanamount`. Interestingly there is a weak negative correlation between `applicantincome` and `coapplicantincome`; presumptively due to a high-earning family being able to sustain with a single income.
+
+
+### Distributions of Categorical Variables
+
+No we turn to the categorical features to see if there are any strong relationships between them and the target variable.  
+The following code will visualize the proportions of each target variable level for each level of a given feature:
+```{r}
+yes_count <- sum(df$suicide == 'Yes')
+no_count <- sum(df$suicide == 'No')
+  
+df %>%
+  select(!is.numeric) %>%
+  gather(var, value, -suicide) %>%
+  group_by(var, value, suicide) %>%
+  summarise(count = n(),
+            .groups = 'drop') %>%
+  mutate(prop = count / ifelse(suicide == 'Yes', yes_count, no_count)) %>%
+  ggplot(aes(x = value, y = prop, fill = suicide)) +
+  geom_col(position = 'dodge') +
+  facet_wrap(~var, scales = 'free') +
+  theme_bw() +
+  labs(y = 'Frequency Proportion',
+       x = element_blank(),
+       title = 'Frequency Distributions For Non-Numeric Variables') +
+  scale_y_continuous(labels = percent_format(accuracy = 1))
+
+```
+
+When interpreting the categorical bar plots, differences between `loan_status` for a given feature-level suggest that a relationship exists between a feature and the target variable. For example, we see a clear difference between the Y/N bars for `credit_history`, `married` and `property_area` whereas the is little difference for the levels of `gender` and no noticeable difference for `self_employed`.  
+
+The existence of a significant relationship between the categorical features and the target variable can be evaluated with a Chi-square test$^3$.
+
+```{r}
+# # Chi-square test for credit_history
+# test <- chisq.test(table(df$credit_history, df$loan_status))
+# test
+```
+```{r}
+# # Chi-square test for married
+# test <- chisq.test(table(df$married, df$loan_status))
+# test
+```
+```{r}
+# # Chi-square test for property_area
+# test <- chisq.test(table(df$property_area, df$loan_status))
+# test
+```
+
+```{r}
+# # Chi-square test for education
+# test <- chisq.test(table(df$education, df$loan_status))
+# test
+```
+```{r}
+# # Chi-square test for loan_amount_term
+# test <- chisq.test(table(df$loan_amount_term, df$loan_status))
+# test
+```
+```{r}
+# # Chi-square test for dependents
+# test <- chisq.test(table(df$dependents, df$loan_status))
+# test
+```
+```{r}
+# # Chi-square test for gender
+# test <- chisq.test(table(df$gender, df$loan_status))
+# test
+```
+
+```{r}
+# # Chi-square test for self employed
+# test <- chisq.test(table(df$self_employed, df$loan_status))
+# test
+```
+
+
+### Data Prep
+
+```{r data prep}
+# impute NA  daaaang!, sorry Leo, I didn't see that you impute the NAs here until too late
+# preproc <- preProcess(df, 'bagImpute')
+# df2 <- predict(preproc, df)
+df2 <- df 
+# %>%
+  # select( married, property_area, credit_history, education, loan_amount_term, loan_status )
+
+# train test split
+set.seed(101)
+trainIndex <- createDataPartition(df2$suicide,
+                                  p = 0.75,
+                                  list = F)
+
+train <- df2[trainIndex,]
+test <- df2[-trainIndex,]
+
+# cross validation train control
+ctrl <- trainControl(method = 'cv', number = 10)
+```
+
