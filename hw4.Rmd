@@ -1,6 +1,6 @@
 ---
 title: "Mental Health Survey"
-subtitle: "Homework 3 Data 622 Section 2 Group 5"
+subtitle: "Homework 4 Data 622 Section 2 Group 5"
 author: "Bonnie Cooper, Orli Khaimova, Leo Yi"
 date: "`r Sys.Date()`"
 output:
@@ -161,26 +161,36 @@ Use `dplyr`'s `glimpse()` function to take a quick look at the data structure. F
 glimpse(df)
 ```
 
-```{r}
-# summary of each field
-describe(df)
-```
-
 From this output, we can summarize each dataset feature as follows:  
 
-1. `loan_id` (ordinal): each entry is a unique value, therefore this feature is not informative for loan status
-2. `gender` (categorical): 2 distinct values with missing data
-3. `married` (categorical):  2 distinct values with missing data
-4. `dependents` (categorical):  4 distinct values with missing data
-5. `education` (categorical):  2 distinct values, no missing data
-6. `self_employed` (categorical):  2 distinct values with missing data
-7. `applicantincome` (numeric): value range, no missing data
-8. `coapplicantincome` (numeric): value range, no missing data
-9. `loanamount` (numeric): value range with missing data
-10. `loan_amount_term` (numeric): relatively few unique values (10) with missing data 
-11. `credit_history` (categorical): 2 distinct values with missing data
-12. `property_area` (categorical): 3 distinct values, no missing data
-13. `loan_status` (categorical): 2 distinct values, no missing data
+| **Column Numbers** |   **Column Labels**  |                                  **Description**                                  |
+|:------------------:|:--------------------:|:---------------------------------------------------------------------------------:|
+|          1         |       `initial`      | (string) subject's initials |
+|          2         |         `age`        |                          (numeric) integer values (years)                         |
+|          3         |         `sex`        |                    (categorical): binary ('male' and 'female')                    |
+|          4         |        `race`        |                                   (categorical)                                   |
+|        5-22        | `adhd_q1`-`adhd_q18` |                            (categorical) ordinal values                           |
+|         23         |     `adhd_total`     |            (numeric): summary feature derived from `adhd_q1`-`adhd_q18`           |
+|        24-38       |   `md_q1a`-`md_q3`   |                            (categorical) ordinal values                           |
+|         39         |      `md_total`      |              (numeric): summary feature derived from `md_q1a`-`md_q3`             |
+|         40         |       `alcohol`      |                           (categorical): ordinal values                           |
+|         41         |         `thc`        |                           (categorical): ordinal values                           |
+|         42         |       `cocaine`      |                           (categorical): ordinal values                           |
+|         43         |     `stimulants`     |                           (categorical): ordinal values                           |
+|         44         | `sedative_hypnotics` |                           (categorical): ordinal values                           |
+|         45         |       `opioids`      |                           (categorical): ordinal values                           |
+|         46         |     `court_order`    |                           (categorical): binary (yes/no)                          |
+|         47         |      `education`     |                         (numeric): interger values (years)                        |
+|         48         |   `hx_of_violence`   |                           (categorical): binary (yes/no)                          |
+|         49         | `disorderly_conduct` |                           (categorical): binary (yes/no)                          |
+|         50         |       `suicide`      |                           (categorical): binary (yes/no)                          |
+|         51         |        `abuse`       |                           (categorical): ordinal values                           |
+|         52         |    `non_subst_dx`    |                           (categorical): ordinal values                           |
+|         53         |      `subst_dx`      |                           (categorical): ordinal values                           |
+|         54         |     `psych_meds`     |                           (categorical): ordinal values                           |
+
+The columns `adhd_q1`-`adhd_q18` and `md_q1a`-`md_q3` are summarized by the derivative columns `adhd_total` and `md_total` respectively. The **adhd** features correspond to an ADHD self-report survey whereas the **md** features give responses to a mood disorder self-report survey. For the initial Exploratory Data Analysis, the individual questions responses will be dropped in place of visualizations and summary statistics on the derived columns, `adhd_total` and `md_total`. A detailed analysis of the individual survey questions will be taken up in the Principal Components Analysis section.
+
 
 Removing `loan_id`: this feature was found to have as many unique values as there are rows in the dataframe and is a record identification label. Therefore, we will drop this feature from the data:
 
@@ -189,6 +199,16 @@ Removing `loan_id`: this feature was found to have as many unique values as ther
 # df <- df %>%
 #   select(-loan_id)
 ```
+
+```{r}
+# summary of each field
+initial_eda_df <- df %>%
+  select( -c( 5:22, 24:38 ) )
+describe( initial_eda_df )
+```
+
+The output from `describe()` shows that many features have missing values. Next, we visualize the extent of the missing values using the `naniar` library.
+
 
 
 ### Missing Values
@@ -446,3 +466,7 @@ test <- df2[-trainIndex,]
 ctrl <- trainControl(method = 'cv', number = 10)
 ```
 
+
+## References
+
+1. [ADHD symptoms and suicide attempts in adults with mood disorders: An observational naturalistic study](https://www.sciencedirect.com/science/article/pii/S2666915321001505)
