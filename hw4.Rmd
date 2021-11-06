@@ -384,9 +384,9 @@ df %>%
   select(!is.numeric) %>%
   gather(var, value, -suicide) %>%
   group_by(var, value, suicide) %>%
-  summarise(count = n(),
+  summarize(count = n(),
             .groups = 'drop') %>%
-  mutate(prop = count / ifelse(suicide == 'Yes', yes_count, no_count)) %>%
+  dplyr::mutate(prop = count / ifelse(suicide == 'Yes', yes_count, no_count)) %>%
   ggplot(aes(x = value, y = prop, fill = suicide)) +
   geom_col(position = 'dodge') +
   facet_wrap(~var, scales = 'free') +
@@ -569,9 +569,39 @@ library( ggbiplot )
 ggbiplot( adhd_dna.pca )
 ```
 
-The biplot shown above renders the data in the feature space of principal components 1 and 2; these are the components that explain most of the variance in the data. The scatterplot points show the projection of the data onto PC1 & PC2. The red arrows represent the original feature space that the data was represented in. We can see that all original features have the largest projection onto the PC1 axis. Relatively few original features have a sizeable projection onto PC2 (e.g. `adhd_q17` & `adhd_q17`). We can also observe that `adhd_total` almost perfectly projects onto PC1; we can interpret this pattern as a signifier of how strongly correlated the individual adhd survey questions are to the composite feature `adhd_total` score.
+The biplot shown above renders the data in the feature space of principal components PC1 and PC2; these are the components that explain most of the variance in the data. The scatterplot points show the projection of the data onto PC1 & PC2. The red arrows represent the original feature space that the data was represented in. We can see that all original features have the largest projection onto the PC1 axis. Relatively few original features have a sizeable projection onto PC2 (e.g. `adhd_q17` & `adhd_q17`). Additionally, these vectors all have a positive component along PC1 showing that the result for each question has a positive relation to PC1. We can also observe that `adhd_total` almost perfectly projects onto PC1; we can interpret this pattern as a signifier of how strongly correlated the individual adhd survey questions are to the composite feature `adhd_total` score. Taken together, the PCA result suggest that the direction of greatest variance of the data is along the adhd score. 
 
 ### Mood Disorders self-report
+
+
+We can perfrom a similar analysis for the Mood Disorder survey results.
+```{r}
+# prepare the mood disorder data and recode all questions from factor to numeric values
+md_df <- df %>%
+  select( starts_with("md_") ) %>%
+  mutate_if( is.factor, as.numeric )
+md_df 
+```
+
+Checking the survey responses for missing values...
+```{r}
+# return a summary table of the missing data in each column
+miss_var_summary( md_df )
+```
+
+Wonderful, there are no missing values, so we can proceed with PCA...
+```{r}
+# use the prcomp function
+md_df.pca <- prcomp( md_df, center = TRUE, scale = TRUE )
+# print the pca summary
+summary( md_df.pca )
+```
+
+```{r}
+ggbiplot( md_df.pca )
+```
+
+A similar pattern emerges for the Mood Disorder survey responses. We see that all the projections again have their major component along PC1 and `md_total` aligns almost perfectly with PC1. However, the main different is that the vectors point in the opposite direction as the ADHD survey components. Again, that all the survey question features project in a similar direction as `md_total` suggests the strong relation between these features.
 
 ## Gradient Boosting
 
