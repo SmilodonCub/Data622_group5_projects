@@ -11,7 +11,7 @@
 
 <meta name="author" content="Bonnie Cooper, Orli Khaimova, Leo Yi" />
 
-<meta name="date" content="2021-11-04" />
+<meta name="date" content="2021-11-06" />
 
 <title>Mental Health Survey</title>
 
@@ -325,7 +325,7 @@ div.tocify {
 <h1 class="title toc-ignore">Mental Health Survey</h1>
 <h3 class="subtitle">Homework 4 Data 622 Section 2 Group 5</h3>
 <h4 class="author">Bonnie Cooper, Orli Khaimova, Leo Yi</h4>
-<h4 class="date">2021-11-04</h4>
+<h4 class="date">2021-11-06</h4>
 
 </div>
 
@@ -377,9 +377,8 @@ mark {
 <span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>df <span class="ot">&lt;-</span> <span class="fu">read.csv</span>(url, <span class="at">header=</span>T, <span class="at">na.strings=</span><span class="st">&quot;&quot;</span>)</span></code></pre></div>
 <p><br></p>
 </div>
-</div>
-<div id="variable-datatypes" class="section level2">
-<h2>Variable Datatypes</h2>
+<div id="variable-datatypes" class="section level3">
+<h3>Variable Datatypes</h3>
 <p>In order to facilitate ease of use, we’ll be renaming the columns. Additionally, we’ll convert each of the number coded fields to factors while also including the proper labels.</p>
 <div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co"># convert column names to lowercase</span></span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="fu">names</span>(df) <span class="ot">&lt;-</span> <span class="fu">lapply</span>(<span class="fu">names</span>(df), tolower)</span>
@@ -454,6 +453,7 @@ mark {
 <span id="cb4-43"><a href="#cb4-43" aria-hidden="true" tabindex="-1"></a>df<span class="sc">$</span>psych_meds <span class="ot">&lt;-</span> <span class="fu">factor</span>(df<span class="sc">$</span>psych_meds, <span class="at">levels =</span> <span class="fu">c</span>(<span class="dv">0</span>,<span class="dv">1</span>,<span class="dv">2</span>), <span class="at">labels =</span> <span class="fu">c</span>(<span class="st">&#39;None&#39;</span>,<span class="st">&#39;One&#39;</span>,<span class="st">&#39;More than one&#39;</span>))</span>
 <span id="cb4-44"><a href="#cb4-44" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb4-45"><a href="#cb4-45" aria-hidden="true" tabindex="-1"></a><span class="co"># str(df)</span></span></code></pre></div>
+</div>
 </div>
 <div id="exploratory-data-analysis" class="section level2">
 <h2>Exploratory Data Analysis</h2>
@@ -1026,6 +1026,18 @@ The following code will visualize the proportions of each target variable level 
 <span id="cb32-17"><a href="#cb32-17" aria-hidden="true" tabindex="-1"></a><span class="co"># cross validation train control</span></span>
 <span id="cb32-18"><a href="#cb32-18" aria-hidden="true" tabindex="-1"></a>ctrl <span class="ot">&lt;-</span> <span class="fu">trainControl</span>(<span class="at">method =</span> <span class="st">&#39;cv&#39;</span>, <span class="at">number =</span> <span class="dv">10</span>)</span></code></pre></div>
 </div>
+</div>
+<div id="clustering-methods" class="section level2">
+<h2>Clustering Methods</h2>
+</div>
+<div id="principal-component-analysis" class="section level2">
+<h2>Principal Component Analysis</h2>
+</div>
+<div id="gradient-boosting" class="section level2">
+<h2>Gradient Boosting</h2>
+</div>
+<div id="support-vector-machine" class="section level2">
+<h2>Support Vector Machine</h2>
 </div>
 <div id="references" class="section level2">
 <h2>References</h2>

@@ -78,7 +78,7 @@ df <- read.csv(url, header=T, na.strings="")
 ```
 <br>
 
-## Variable Datatypes
+### Variable Datatypes
 
 In order to facilitate ease of use, we'll be renaming the columns. Additionally, we'll convert each of the number coded fields to factors while also including the proper labels.
 
@@ -465,6 +465,20 @@ test <- df2[-trainIndex,]
 # cross validation train control
 ctrl <- trainControl(method = 'cv', number = 10)
 ```
+
+
+
+## Clustering Methods
+
+
+## Principal Component Analysis
+
+
+## Gradient Boosting
+
+
+## Support Vector Machine
+
 
 
 ## References
