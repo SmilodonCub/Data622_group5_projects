@@ -68,6 +68,7 @@ library(naniar)
 library(conflicted)
 library(pheatmap)
 library(corrplot)
+library(factoextra)
 
 # resolve function name conflict
 conflict_prefer('filter', 'dplyr')
@@ -95,6 +96,9 @@ names(df) <- str_replace_all(names(df), '\\.', '_')
 
 # rename last column to remove trailing underscore
 names(df)[ncol(df)] <- 'psych_meds'
+
+# raw data with renamed columns
+df_raw <- df
 
 names(df)
 
@@ -472,6 +476,165 @@ ctrl <- trainControl(method = 'cv', number = 10)
 
 
 ## Clustering Methods
+
+### Finding K
+
+```{r cluster wss}
+
+# exclude names
+df3 <- df_raw %>%
+  select(-initial)
+
+# impute null
+preproc <- preProcess(df3, 'bagImpute')
+df4 <- predict(preproc, df3)
+
+fviz_nbclust(df4, kmeans, method = "wss")
+
+```
+
+Based on the sum of squares for each value of K, we can use 2 clusters as the 'elbow' point.
+
+```{r cluster silhouette}
+
+fviz_nbclust(df4, kmeans, method = "silhouette")
+
+```
+Based on the average silhouette width of clusters, we can proceed with K = 2.
+
+### Calculating Clusters
+
+```{r cluster calc}
+
+# 25 random starts
+cluster_k2 <- kmeans(df4, 2, nstart = 25)
+
+# add cluster number to dataframe
+df4$cluster_k2 <- cluster_k2$cluster
+
+# check cluster sizes
+table(df4$cluster_k2)
+```
+
+Using K = 2, we created an almost even split of observations.
+
+```{r cluster viz adhd}
+# adhd vs suicide
+fviz_cluster(cluster_k2, data = df4, c('adhd_total', 'suicide'))
+```
+The clusters created show a clear delineation for respondents based on `adhd_total`.
+
+```{r cluster viz mood disorder}
+# mood disorder vs suicide
+fviz_cluster(cluster_k2, data = df4, c('md_total', 'suicide'))
+
+```
+
+The results of the k2 cluster show considerable overlap based on `md_total`.
+
+### Relative Cluster Differences
+
+Let's show relative distributions for each cluster and variable.
+
+```{r cluster plot function}
+
+# function to plot relative variable distributions for clusters
+cluster_plot <- function(start_col, end_col, plot = 'density', legend_position = 'bottom') {
+
+  temp_df <- df4[,start_col:end_col] %>%
+    bind_cols(cluster = factor(df4$cluster_k2)) %>%
+    gather(var, val, -cluster)
+
+  if (plot == 'density') {
+    p <- ggplot(temp_df, aes(x = val, fill = cluster)) +
+    geom_density(alpha = 0.3)
+  } else if (plot == 'histogram') {
+    p <- ggplot(temp_df, aes(x = val, fill = cluster)) +
+    geom_histogram(alpha = 0.3)
+  }
+  
+  p +
+    facet_wrap(~var, scales = 'free') +
+    theme_bw() +
+    labs(fill = 'Cluster',
+         x = element_blank(),
+         y = element_blank()
+         ) +
+    theme(axis.ticks.y = element_blank(),
+          axis.text.y = element_blank(),
+          axis.text.x = element_text(size = 8),
+          legend.position = legend_position)
+
+}
+
+```
+
+#### Demographics
+
+```{r, fig.height=3}
+
+cluster_plot(1,3)
+
+```
+
+- Cluster 1 show a bimodal distribution of age, with modes as 25 and 45 years old. Cluster 2 has fewer younger people with a higher single mode.
+- Cluster 2 is more likely to be African American.
+- Cluster 1 is more likely to be female and Cluster 2 is more likely to be male.
+
+#### ADHD 
+
+```{r cluster adhd, fig.height = 7}
+
+cluster_plot(4,22)
+
+```
+
+With clear differences for each question as well as the total, cluster 1 reported higher adhd values relative to cluster 2.
+
+#### Mood Disorders
+
+```{r cluster mood disorders, fig.height = 7}
+
+cluster_plot(23,38)
+
+```
+
+Some questions have similiar distributions, but generally overall as well as altogether, cluster 1 is more likely to report higher in mood disorders.
+
+#### Substance Abuse
+
+```{r cluster substance abuse}
+
+cluster_plot(39,44)
+
+```
+
+- Alcohol: Both clusters show similar usage patterns for alcohol, with cluster 1 having a slightly higher chance of using, abusing, and being dependent. Cluster 2 has a higher chance of not drinking.
+- Cocaine: Cluster 1 is twice as likely as cluster 2 to not use cocaine and cluster 2 has a relatively slightly higher chance of being dependent.
+- Opioids: Cluster 2 has a higher chance of not using.
+- Sedative Hypnotics: Cluster 2 has a slighly higher chance of not using.
+- Stimulants: Cluster 2 mostly does not use.
+- THC: Cluster 1 more likely to both not use and also to be dependent.
+
+#### Substance Abuse Levels
+
+```{r cluster substance abuse levels, fig.height=3}
+
+cluster_plot(51,53)
+
+```
+
+Cluster 2 has a higher chance of not taking non-substance abuse related drugs and is more likely to take one substance related drug.
+
+#### Social
+
+```{r}
+
+cluster_plot(45,50)
+
+```
+
+Cluster 2 is less likely to experience abuse and suicide, and more likely to have a history of violence and be charged with disorderly conduct
 
 
 ## Principal Component Analysis
