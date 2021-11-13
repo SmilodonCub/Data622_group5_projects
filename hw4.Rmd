@@ -12,6 +12,7 @@ output:
     theme: paper
     highlight: tango
     font-family: Consolas
+    code_folding: hide
   pdf_document:
     toc: yes
 ---
@@ -479,7 +480,9 @@ ctrl <- trainControl(method = 'cv', number = 10)
 
 ### Finding K
 
-```{r cluster wss}
+In order to find patients of clusters, we first need to determine the number of clusters. Below, we'll use two common methods, evaluating the sum of squares and silhouette width, in order to decide how many clusters we'll use.
+
+```{r cluster data prep}
 
 # exclude names
 df3 <- df_raw %>%
@@ -489,20 +492,33 @@ df3 <- df_raw %>%
 preproc <- preProcess(df3, 'bagImpute')
 df4 <- predict(preproc, df3)
 
+```
+
+#### Total Within Sum of Square
+
+```{r cluster wss}
+
 fviz_nbclust(df4, kmeans, method = "wss")
 
 ```
 
 Based on the sum of squares for each value of K, we can use 2 clusters as the 'elbow' point.
 
+#### Average Siluotte Width
+
 ```{r cluster silhouette}
 
 fviz_nbclust(df4, kmeans, method = "silhouette")
 
 ```
+
 Based on the average silhouette width of clusters, we can proceed with K = 2.
 
+In this case, both methods have a consensus on two clusters.
+
 ### Calculating Clusters
+
+Once the clusters are calculated, let's check the size of each cluster to make sure we're looking at different groups.
 
 ```{r cluster calc}
 
@@ -514,27 +530,36 @@ df4$cluster_k2 <- cluster_k2$cluster
 
 # check cluster sizes
 table(df4$cluster_k2)
+
 ```
 
-Using K = 2, we created an almost even split of observations.
+Using K = 2, we created an almost even split of observations. Cluster 1 has 88 observations and cluster 2 has 87.
+
+#### ADHD Total vs Suicide Plot
 
 ```{r cluster viz adhd}
+
 # adhd vs suicide
 fviz_cluster(cluster_k2, data = df4, c('adhd_total', 'suicide'))
+
 ```
-The clusters created show a clear delineation for respondents based on `adhd_total`.
+
+The clusters created show a clear delineation for respondents based on `adhd_total`. This suggests that the clusters are separated based on levels of ADHD.
+
+#### Mood Disorder Total vs Suicide Plot
 
 ```{r cluster viz mood disorder}
+
 # mood disorder vs suicide
 fviz_cluster(cluster_k2, data = df4, c('md_total', 'suicide'))
 
 ```
 
-The results of the k2 cluster show considerable overlap based on `md_total`.
+The results of the k2 cluster show considerable overlap based on `md_total`. This means that the clusters aren't separated by mood disorder levels.
 
 ### Relative Cluster Differences
 
-Let's show relative distributions for each cluster and variable.
+Let's examine relative distributions for each cluster and variable.
 
 ```{r cluster plot function}
 
