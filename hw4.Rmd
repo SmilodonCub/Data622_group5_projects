@@ -70,6 +70,8 @@ library(conflicted)
 library(pheatmap)
 library(corrplot)
 library(factoextra)
+library(gbm)
+library(caret) 
 
 # resolve function name conflict
 conflict_prefer('filter', 'dplyr')
@@ -389,7 +391,7 @@ df %>%
   select(!is.numeric) %>%
   gather(var, value, -suicide) %>%
   group_by(var, value, suicide) %>%
-  summarize(count = n(),
+  dplyr::summarize(count = n(),
             .groups = 'drop') %>%
   dplyr::mutate(prop = count / ifelse(suicide == 'Yes', yes_count, no_count)) %>%
   ggplot(aes(x = value, y = prop, fill = suicide)) +
@@ -664,38 +666,59 @@ Cluster 2 is less likely to experience abuse and suicide, and more likely to hav
 
 ## Principal Component Analysis
 
-### ADHD self-report
+In this section we will explore the ADHD data set further using Principal Component Analysis (PCA). PCA is a dimensionality reduction method that can be very useful for detecting patterns in complex, feature-rich data. At it's core, PCA is a fairly simple linear algebra manipulation, an eigendecomposition. Basically, PCA maps the data onto a new set components that consist of orthogonal axes (eigenvectors) and magnitudes (eigenvalues). Each successive component is added such that it describes as much remaining variance in the data as possible. From the resulting components we can select a subset that describe most of the variance and use this new, lower-dimensional feature space as a more convenient way to observe relationships in the data that were previously masked by the data's complexity.  
+
+To approach this analysis, we derive 2 sets of features from the original data. Data features that correspond to 1) self-reported answers for an ADHD survey, 2) self-reported answers for a Mood Disorder survey.
+
+### PCA: ADHD Self-Report Survey
+
+[The Adult ADHD Self-Reporting Scale Symptoms Checklist](https://add.org/wp-content/uploads/2015/03/adhd-questionnaire-ASRS111.pdf) is a survey consisting of 18 questions that all range on an ordinal categorical scale: 'Never', 'Rarely', 'Sometimes', 'Often', 'Very Often'
+
+#### Preprocessing
+
+To prepare the ADHD survey responses we performed the following:  
+
+* selected the ADHD survery question responses and exclude the feature `adhd_total` which gives a summary score for the survey
+* PCA works best with numeric data, so we will transform the ordinal categorical features to numeric values
+* evaluate the presence of missing values in the data
+
 ```{r}
 # preparing the ADHD self-report questionnaire data
 adhd_df <- df %>%
-  select( starts_with("adhd_") )
-```
-
-PCA works best with numeric data, so we will transform the ordinal categorical features to numeric values
-```{r}
+  select( starts_with("adhd_") ) %>%
+  select( -'adhd_total' )
 # recode all questions from factor to numeric values
 adhd_df <- adhd_df %>%
   mutate_at( 
     vars(matches("adhd_q") ), 
          funs( recode_factor( ., 'Never'=0,'Rarely'=1,'Sometimes'=2,'Often'=3,'Very Often'=4 ) ) )  %>%
   mutate_if( is.factor, as.numeric )
-dim( adhd_df )
-```
-Let's evaluate the missingness of the data
-```{r}
+paste( 'number of rows:', dim( adhd_df )[1] )
+
+
 # return a summary table of the missing data in each column
+paste( 'Summary of missing responses in the ADHD Self-Reporting Survey' )
 miss_var_summary( adhd_df )
 ```
 
-There is only 1 missing value, so it seems reasonable to just drop it
+We see that there is only 1 missing value, so it seems reasonable to just drop it
 ```{r}
 # remove missing
 adhd_dna <- adhd_df %>%
   drop_na()
-dim( adhd_dna )
+paste( 'number of rows:', dim( adhd_dna )[1] )
 ```
 
-We can perform PCA easily from scratch and use the intermediate steps to learn more about the relationship of the individual question features to the ADHD total score:
+#### PCA from scratch
+
+We can perform PCA easily from scratch and use the intermediate steps to learn more about the relationship of the individual question features to the ADHD total score:  
+
+* First: we need to scale the data. 
+  - This we de-mean the data and normalize the range of all features. Perhaps, redundant because all questions for this survey are on the same scale.
+  - use the `scale()` function
+* Second: we find the covariance matrix
+  - use the `cov()` function
+
 ```{r}
 # scale the data to facilitate PCA
 adhd_df_scaled <- scale( adhd_dna )
@@ -708,9 +731,26 @@ Visualizing the covariance matrix
 pheatmap(adhd_df_cov, display_numbers = T, color = colorRampPalette(c('white','red'))(100), cluster_rows = F, cluster_cols = F, fontsize_number = 15)
 ```
 
-The ADHD total score is a composite feature that sums all the values of the question responses. Therefore, it comes as no surprise to see the positive covariance of the question responses and the total score: as question responses increase from 0-4, the score has a tendency to increase. Because the values had been standardized, the covariances are equivalent to the correlations. Therefore, we can also infer the strength of the relationships between the individual questions and the total score. Question 8 has the strongest positive relationship with the total score(`adhd_q8` = 0.81) whereas questions 15 and 17 have the weakest positive relationship with total score (`adhd_q15`=0.62, `adhd_q17`=0.63).  
+The values off the diagonal of the matrix describe the degree of covariance between the two features. We see that some pairs of questions are more closely related than others. For instance, questions #5 and #13 have the highest covariance:  
 
-The covariance matrix can now be used for an eigendecomposition to find the principal components that describe the most variance in the data
+* `adhd_q5` - "How often do you fidget or squirm with your hands or feet when you have to sit down for a long time?"
+* `adhd_q13` - "How often do you feel restless or fidgety"
+
+Perhaps it is no surprise that subject who report the frequency they fidget when sitting down for a long time report a similar incidence of general fidgeting/squirming.  
+
+Another closely covarying pair of questions are #16 and #18  
+
+* `adhd_q16` - "When you’re in a conversation, how often do you find yourself finishing the sentences of the people you are talking to, before they can finish them themselves?"
+* `adhd_q18` - "How often do you interrupt others when they are busy?"
+
+Again, these are two very similar questions.  
+It is equally interesting to evaluate the questions with the lowest covariance, questions #3 and #16(see above).  
+
+* `adhd_q3` - "How often do you have problems remembering appointments or obligations?"
+
+Indeed, conversation skills and the ability to remember appointments are two (subjectively) different task, so it is reasonable to not see a strong relation between the two.  
+
+Moving on, the covariance matrix can now be used for an eigendecomposition to find the principal components that describe the most variance in the data
 ```{r}
 # eigendecomposition of the covariance matrix
 eig <- eigen( adhd_df_cov )
@@ -719,14 +759,15 @@ components <- eig$vectors
 explained_variance
 ```
 
-Now to store the eigen values in a dataframe to explore the amount of variance explained by the components. Furthermore, we find the ratio of explained variance by normalizing the cumulative variance of the components
+Now, by storing the eigen values in a dataframe, we can explore the amount of variance explained by the PCA components. Furthermore, we find the ratio of explained variance by normalizing the cumulative variance of the components
 ```{r}
 compnum <- 1:length( explained_variance )
 exv_cumsum <- cumsum( explained_variance )/length( explained_variance )
 pca_res <- data.frame( compnum, explained_variance, exv_cumsum )
+pca_res
 ```
 
-Visualizing the cumulative explained variance described by the principal components:
+Visualizing the cumulative explained variance described by the principal components with a Skree Plot:
 ```{r}
 ggplot( pca_res, aes( x = compnum, y = exv_cumsum ) ) +
   geom_line() +
@@ -738,10 +779,12 @@ ggplot( pca_res, aes( x = compnum, y = exv_cumsum ) ) +
   theme_minimal() +
   xlab( 'Principal Component Number' ) +
   ylab( 'Cummulative Explained Variance' ) +
-  ggtitle( 'Explained Variance of Principal Components' )
+  ggtitle( 'Scree Plot: Explained Variance of Principal Components' )
 ```
 
 The figure above plots the cumulative explained variance of the ADHD survey questions and total score as a result of the eigendecomposition. We see that the first principal component accounts for `r paste0( round( exv_cumsum[1]*100,1 ), '%' )` of the total variance. Adding successive components gradually increases the cumulative explained variance. It takes as many as 14 components to describe 95% of the data's variance. Therefore, dimensionality reduction by way of PCA only moderately decreases the components necessary to adequately explain the data (with a threshold of 95%).
+
+### PCA using `prcomp()`
 
 We can determine the principal components of the ADHD data more quickly using the `prcomp()` function from the `stats` library.
 ```{r}
@@ -751,24 +794,27 @@ adhd_dna.pca <- prcomp( adhd_dna, center = TRUE, scale = TRUE )
 summary( adhd_dna.pca )
 ```
 
+It is interesting to compare the Cumulative Proportion from the `prcomp()` output with the feature `pca_res$exv_cumsum`; the results are the same for both the built-in PCA function as well as are PCA from scratch (a relief!).
+
 The PCA object that results from `prcomp()` can be used to visualize the components using the `ggbiplot` library:  
 ```{r}
 library( ggbiplot )
 ggbiplot( adhd_dna.pca )
 ```
 
-The biplot shown above renders the data in the feature space of principal components PC1 and PC2; these are the components that explain most of the variance in the data. The scatterplot points show the projection of the data onto PC1 & PC2. The red arrows represent the original feature space that the data was represented in. We can see that all original features have the largest projection onto the PC1 axis. Relatively few original features have a sizeable projection onto PC2 (e.g. `adhd_q17` & `adhd_q17`). Additionally, these vectors all have a positive component along PC1 showing that the result for each question has a positive relation to PC1. We can also observe that `adhd_total` almost perfectly projects onto PC1; we can interpret this pattern as a signifier of how strongly correlated the individual adhd survey questions are to the composite feature `adhd_total` score. Taken together, the PCA result suggest that the direction of greatest variance of the data is along the adhd score. 
+The biplot shown above renders the data in the feature space of principal components PC1 and PC2; these are the components that explain most of the variance in the data. The scatterplot points show the projection of the data onto PC1 & PC2. The red arrows represent the original feature space that the data was represented in. We can see that the original features have the largest projection onto the PC1 axis. Relatively few original features have a sizeable projection onto PC2 (e.g. `adhd_q16` & `adhd_q17`). Additionally, these vectors all have a positive component along PC1 showing that the result for each question has a positive relation to PC1. The size of the angle between a given pair of vectors is inversely related to the correlation of the pair. For example, we see that `adhd_q3` and `adhd_q16` have the largest angle between them; this corresponds to our earlier observation looking at the covariance matrix. 
 
 ### Mood Disorders self-report
 
+The [Mood Disorder Questionnaire](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC314375/) is a self-reporting survey that can be used to identify subjects that may be bipolar.  
 
-We can perfrom a similar analysis for the Mood Disorder survey results.
+We can perform a similar PCA analysis for the Mood Disorder survey results. Taking similar preprocessing steps: 1) select mood disorder question features, evaluate missing values... 
 ```{r}
 # prepare the mood disorder data and recode all questions from factor to numeric values
 md_df <- df %>%
   select( starts_with("md_") ) %>%
+  select( -'md_total' ) %>%
   mutate_if( is.factor, as.numeric )
-md_df 
 ```
 
 Checking the survey responses for missing values...
@@ -785,13 +831,77 @@ md_df.pca <- prcomp( md_df, center = TRUE, scale = TRUE )
 summary( md_df.pca )
 ```
 
-```{r}
-ggbiplot( md_df.pca )
+```{r,fig.width = 14}
+ggbiplot( md_df.pca ) 
 ```
 
-A similar pattern emerges for the Mood Disorder survey responses. We see that all the projections again have their major component along PC1 and `md_total` aligns almost perfectly with PC1. However, the main different is that the vectors point in the opposite direction as the ADHD survey components. Again, that all the survey question features project in a similar direction as `md_total` suggests the strong relation between these features.
+A similar pattern emerges for the Mood Disorder survey responses. We see that all the projections again have a major component along PC1 and `md_total` aligns almost perfectly with PC1. Again, we can infer relationships between features from the biplot: `md_q1c` and `md_q3` have the widest angle separating them and are therefore the least correlated features.  
 
 ## Gradient Boosting
+
+Gradient Boosting builds a prediction model from an ensemble of smaller 'weak learner' models. In this section we will implement the gradient boosting approach to fit a binary classification model to features from the ADHD data set to predict whether a patient attempts suicide.
+
+### Data Preparation
+
+Before fitting a Gradient Boost Model, we will collect a new subset of features for this approach. Instead of including all features for individual questions on either of the summaries, we will only be using the total scores (`adhd_total` and `md_total`) because the total scores are composite features build from the scores on the questions. Additionally, the categorical responses 
+```{r}
+ordinal_cats <- c( 'alcohol', 'thc', 'cocaine', 'stimulants', 'sedative_hypnotics', 'opioids', 'suicide',
+                   'court_order', 'hx_of_violence', 'disorderly_conduct', 'non_subst_dx', 'subst_dx')
+gboost_df <- df %>%
+  select( -starts_with("md_q") ) %>%
+  select( -starts_with("adhd_q")) %>%
+  select( -c('initial') ) %>%
+  dplyr::mutate( across( all_of( ordinal_cats ), as.numeric ) )
+paste( 'number of rows:', dim( gboost_df )[1] )
+glimpse( gboost_df )
+```
+Evaluate the presense of missing data
+```{r}
+miss_var_summary( gboost_df )
+```
+
+```{r}
+gg_miss_upset( gboost_df )
+```
+
+We see that the feature `psych_meds` is missing many values, so we will drop this feature from further consideration. Additionally, we see that there are approximately two dozen rows that are missing values for multiple features. Therefore, instead of imputing the missing, we will simply drop these rows.
+
+```{r}
+gboost_df <- gboost_df %>%
+  select( -psych_meds ) %>%
+  drop_na()
+paste( 'number of rows:', dim( gboost_df )[1] )
+miss_var_summary( gboost_df )
+```
+
+
+We will begin by splitting the data into train and test sets
+```{r}
+indexes = createDataPartition(gboost_df$suicide, p = .90, list = F)
+train = gboost_df[indexes, ]
+test = gboost_df[-indexes, ]
+```
+
+```{r}
+# Train model with preprocessing & repeated cv
+model_gbm <- caret::train(suicide ~ .,
+                          data = train,
+                          method = "gbm",
+                          preProcess = c("scale", "center"),
+                          trControl = trainControl(method = "repeatedcv", 
+                                                  number = 10, 
+                                                  repeats = 3, 
+                                                  verboseIter = FALSE),
+                          verbose = 0)
+print(model_gbm)
+```
+
+```{r}
+#caret::confusionMatrix(
+#  data = predict(model_gbm, test),
+#  reference = test$suicide
+#  )
+```
 
 
 ## Support Vector Machine
@@ -801,3 +911,5 @@ A similar pattern emerges for the Mood Disorder survey responses. We see that al
 ## References
 
 1. [ADHD symptoms and suicide attempts in adults with mood disorders: An observational naturalistic study](https://www.sciencedirect.com/science/article/pii/S2666915321001505)
+2. [The Adult ADHD Self-Reporting Scale Symptoms Checklist](https://add.org/wp-content/uploads/2015/03/adhd-questionnaire-ASRS111.pdf)
+3. [Mood Disorder Questionnaire](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC314375/)
