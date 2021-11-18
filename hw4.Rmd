@@ -1,7 +1,7 @@
 ---
 title: "Mental Health Survey"
 subtitle: "Homework 4 Data 622 Section 2 Group 5"
-author: "Bonnie Cooper, Orli Khaimova, Leo Yi"
+author: "Bonnie Cooper, Leo Yi"
 date: "`r Sys.Date()`"
 output:
   html_document:
@@ -202,16 +202,7 @@ From this output, we can summarize each dataset feature as follows:
 
 The columns `adhd_q1`-`adhd_q18` and `md_q1a`-`md_q3` are summarized by the derivative columns `adhd_total` and `md_total` respectively. The **adhd** features correspond to an ADHD self-report survey whereas the **md** features give responses to a mood disorder self-report survey. For the initial Exploratory Data Analysis, the individual questions responses will be dropped in place of visualizations and summary statistics on the derived columns, `adhd_total` and `md_total`. A detailed analysis of the individual survey questions will be taken up in the Principal Components Analysis section.
 
-
-```{r}
-# summary of each field
-initial_eda_df <- df %>%
-  select( -c( 5:22, 24:38 ) )
-describe( initial_eda_df )
-```
-
-The output from `describe()` shows that many features have missing values. Next, we visualize the extent of the missing values using the `naniar` library.
-
+Next, we visualize the extent of the missing values using the `naniar` library.
 
 
 ### Missing Values
@@ -245,11 +236,20 @@ gg_miss_upset( df )
 Both the `vis_miss()` and `gg_miss_upset()` visualization are informative, because they reveal some interesting patterns in the missing values for the data set. For instance, once we remove `psych_meds` most of the remaining rows that are not full, hold multiple missing values from a subset of the features. In other words, the remaining missing values are not randomly dispersed across the data set. Rather, they are concentrated in a subset of the features: `disorderly_conduct`, `suicide`, `abuse`, `non_subst_dx` and `subst_dx`. Notably, the responses that correspond to the ADHD and Mood Disorder self-reporting surveys are have no missing values; this knowledge will be helpful downstream. Further handling of missing values will be tailored to the analysis of each of the sections below.
 
 
-### Exploratory Visualization
+### Exploratory Data Visualizations
 
 To gain a feel for the data, we will evaluate visualizations of select features.
 
 #### Distributions of Demographic Variables
+
+Summary Statistics of Demographic Variables
+```{r}
+# summary of each demographic feature
+demo_df <- df %>%
+  select(c('age','sex','race','education'))#select( -c( 5:22, 24:38 ) )
+describe( demo_df )
+```
+
 
 Visualizing the demographic information of the mental health study
 
@@ -264,6 +264,7 @@ p2 <- df %>%
   mutate( n = n/num_obs ) %>%
   ggplot( aes(x=sex, y=n)) + 
   geom_bar(stat = "identity") +
+  ylim( 0, 0.6 ) +
   ylab( 'proportion' ) +
   ggtitle( 'Distribution  of Sex (binary)' ) +
   theme_classic()
@@ -273,28 +274,152 @@ p3 <- df %>%
   ggplot( aes(x=race, y=n)) + 
   geom_bar(stat = "identity") +
   ylab( 'proportion' ) +
+  ylim( 0, 0.6 ) +
   ggtitle( 'Distribution  of Race' ) +
   theme_classic() + 
   scale_x_discrete(guide = guide_axis(n.dodge = 2))
-grid.arrange(p1, p2, p3, ncol=3)
+p4 <- ggplot( df, aes(x = education) ) +
+  geom_density( fill="#69b3a2", color="#e9ecef", alpha=0.8 ) +
+  theme_classic() +
+  ggtitle( 'Education Density Plot' )
+num_obs <- dim(df)[1]
+grid.arrange(p1, p4, p2, p3, ncol=2)
 ```
   
 From these visualization we learn several things about the mental health study participants:  
 
 1. **Age** - the age distribution is bimodal with one peak at approximate 26 and another at 46 and a range from 18 to 69 years of age.
-2. **Sex** - sex is given as a binary feature and is not equally balanced with 57% Male and 43% Female
-3. **Race** - race takes one of four values: 'White' (41%), 'African American' (57%), 'Hispanic'(.6%) and 'Other or Missing Data'(1%).
+2. **Education** - education has an interesting envelope. There is a sharp peak at ~12years (high school graduates) with long kurtosis to either side
+3. **Sex** - sex is given as a binary feature and is not equally balanced with 57% Male and 43% Female
+4. **Race** - race takes one of four values: 'White' (41%), 'African American' (57%), 'Hispanic'(.6%) and 'Other or Missing Data'(1%).
+
 
 #### ADHD and Mood Disorder Survey Scores
 
+Summary Statistics for self-report surveys
+```{r}
+# summary of each field
+initial_eda_df <- df %>%
+  select( c('adhd_total', 'md_total' ) )
+describe( initial_eda_df )
+```
+
 Visualizing the `adhd_total` and `md_total` features. These two features give a summary score for the questions on an [ADHD Self-Reporting Survey](https://add.org/wp-content/uploads/2015/03/adhd-questionnaire-ASRS111.pdf) and a separate [Mood Disorder Questionnaire](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC314375/). 
 
-#### Substance Misuse Features
+```{r figTotal, fig.height = 5, fig.width = 12}
+p1 <- ggplot( df, aes(x = adhd_total) ) +
+  geom_density( fill="#69b3a2", color="#e9ecef", alpha=0.8 ) +
+  theme_classic() +
+  ggtitle( 'ADHD Self-Reporting Survey Scores' )
+p2 <- ggplot( df, aes(x = md_total) ) +
+  geom_density( fill="#9D85FC", color="#e9ecef", alpha=0.8 ) +
+  theme_classic() +
+  ggtitle( 'Mood Disorder Self-Reporting Survey Scores' )
+grid.arrange( p1, p2, ncol=2 )
+```
+
+`adhd_total` has a roughly normal distribution with a mean centered at 34.3 and a range of 0 to 72. `md_total` has an entirely different range from 0 to 17; it's distribution is more left-skewed than ADHD.  
+
+Next we visualize `adhd_total` ~ `md_total` to evaluate the relationship between the two total scores
+```{r}
+ggplot(df, aes(x=md_total, y=adhd_total)) + 
+  geom_point()+
+  geom_smooth(method=lm) +
+  theme_classic() +
+  ggtitle('ADHD total ~ Mood Disorder total')
+```
+
+We can evaluate the fit of a linear model to the data:
+```{r}
+fit = lm( adhd_total ~ md_total, df )
+summary( fit )
+par(mfrow = c(2, 2))
+p1 <- plot(fit, which=1)
+p2 <- plot(fit, which=2)
+p3 <- plot(fit, which=3)
+p4 <- plot(fit, which=4)
+par(mfrow = c(1, 1))
+```
+
+The fit is statistically significant and the diagnostics suggest that the assumptions for linearity are reasonably met. Therefore, we can say with confidence that for a given point increase in Mood Disorder Score, the average ADHD score increases 1.7769 points.  
+
+For an EDA of the individual question responses for both the Mood Disorder and ADHD self-reporting surveys, please see the PCA section.
+
+#### Substance Misuse and other Features
+
+Summary Statistics for Substance Misuse Features
+```{r}
+# summary of each field
+sub_df <- df %>%
+  select( c( 'alcohol', 'thc', 'cocaine', 'stimulants', 'sedative_hypnotics', 'opioids', 'subst_dx' ) )
+describe( sub_df )
+```
+
+The individual substance features (e.g. `opioids`) describe the severity with which a participants uses or does not use a particular substance. On the other hand, `subst_dx` counts how many substances a participant has a reported using irrespective of severity of use. The following figure will attempt to find patterns between the individual substances and the summary feature.
+
+```{r}
+none_count <- sum(sub_df$subst_dx == 'None')
+one_count <- sum(sub_df$subst_dx == 'One')
+two_count <- sum(sub_df$subst_dx == 'Two')
+more_count <- sum(sub_df$subst_dx == 'Three or more')
+total_count <- dim(sub_df)[1]
+  
+plot_df <- sub_df %>%
+  drop_na() %>%
+  #mutate_if(is.factor, as.numeric) %>%
+  gather(var, value, -subst_dx) %>%
+  group_by(var, value, subst_dx) %>%
+  dplyr::summarize(count = n(),
+            .groups = 'drop') %>%
+  dplyr::mutate(prop = count / case_when(subst_dx == 'None' ~ none_count, 
+                                         subst_dx == 'One' ~ one_count,
+                                         subst_dx == 'Two' ~ two_count,
+                                         subst_dx == 'Three or more' ~ more_count))
+plot_df$value <- factor(plot_df$value,levels = c("No Use", "Use", "Dependence", "Abuse"))
+
+ggplot(plot_df, aes(x = value, y = count, fill = subst_dx)) +
+  geom_col(position="stack") +#, position = 'dodge') +
+  facet_wrap(~var, scales = 'free') +
+  theme_bw() +
+  labs(y = 'count',
+       x = element_blank(),
+       title = 'Distributions For Substances') #+
+  #scale_y_continuous(labels = percent_format(accuracy = 1))
+
+```
+From the figure above, we see that for each individual substance, the majority of participants report 'No use'. However, the instances of 'Dependence' are elevated for several substances notably alcohol, cocaine and THC. For these substances it is the case that there is a substantial proportion of participants that also reported a substance abuse diagnosis (`subst_dx`) of three or more substances. There is another interesting result in this figure: there are many instances where a level of substance use was self-reported for a participant that also reported 'None' for substance abuse diagnosis. It is interesting that a participant can simultaneously report to, for example, have a dependence on alcohol yet report 'None' for a substance abuse diagnosis. Perhaps more documentation on the dataset can shed light on this.
+
+To re-represent this data, we will generate a new summary feature that sums the reported sevarity of use for each substance included in the self report:
+```{r}
+sub_df <- sub_df %>%
+  mutate_if(is.factor, as.numeric) %>%
+  mutate( subst_sum = alcohol + thc + cocaine + stimulants + sedative_hypnotics + opioids )
+```
+
+We can derive a similar summary variable for the non-substance abuse behaviors reported (e.g. disorderly conduct, court order etc.). Hoever, we exclude `abuse` because it has a difference and non-binary reporting criteria. 
+
+```{r}
+abuse_df <- df %>%
+  select( c( 'suicide', 'disorderly_conduct', 'hx_of_violence', 'court_order' ) ) %>%
+  mutate_if(is.factor, as.numeric) %>%
+  mutate( abuse_sum = suicide + disorderly_conduct + hx_of_violence + court_order )
+```
 
 
-### Correlation of Numeric Variables
+Visualize the distribution of the new summary variables
+```{r figNewFeats, fig.height = 5, fig.width = 12}
+p1 <- ggplot( sub_df, aes(x = subst_sum) ) +
+  geom_density( fill="#69b3a2", color="#e9ecef", alpha=0.8 ) +
+  theme_classic() +
+  ggtitle( 'ADHD Self-Reporting Survey Scores' )
+p2 <- ggplot( abuse_df, aes(x = abuse_sum) ) +
+  geom_density( fill="#9D85FC", color="#e9ecef", alpha=0.8 ) +
+  theme_classic() +
+  ggtitle( 'Mood Disorder Self-Reporting Survey Scores' )
+grid.arrange( p1, p2, ncol=2 )
+```
 
-Here we can look for correlations between feature variables
+For one last exploratory visualization of the data, we will look at correlations between the self-reporting survey summary features (`adhd_total` & `md_total`) and the new summary feature generated here. Obviously, a positive correlation is expected between the two survey totals, because we demonstrated the linear regression earlier.
 ```{r function, echo = F}
 
 plot_corr_matrix <- function(dataframe, significance_threshold){
@@ -337,45 +462,15 @@ plot_corr_matrix <- function(dataframe, significance_threshold){
 ```
 
 ```{r corrplot, fig.height = 8}
+df_feats <- df %>%
+  select( c('adhd_total','md_total') ) %>%
+  mutate( subst_sum = as.integer( sub_df$subst_sum ),
+          abuse_sum = as.integer( abuse_df$abuse_sum ) ) %>%
+  drop_na()
 
-df_numeric <- df %>%
-  select_if(is.numeric)
-  # select(applicantincome, coapplicantincome, loanamount )
-
-plot_corr_matrix(df_numeric, -1)
+corrplot(cor(df_feats), method="number")
 ```
-We can see a strong positive correlation between the features `applicantincome` and `loanamount`. There is a weak positive correlation between `coapplicantincome` and `loanamount`. Interestingly there is a weak negative correlation between `applicantincome` and `coapplicantincome`; presumptively due to a high-earning family being able to sustain with a single income.
-
-
-### Distributions of Categorical Variables
-
-No we turn to the categorical features to see if there are any strong relationships between them and the target variable.  
-The following code will visualize the proportions of each target variable level for each level of a given feature:
-```{r}
-yes_count <- sum(df$suicide == 'Yes')
-no_count <- sum(df$suicide == 'No')
-  
-df %>%
-  select(!is.numeric) %>%
-  gather(var, value, -suicide) %>%
-  group_by(var, value, suicide) %>%
-  dplyr::summarize(count = n(),
-            .groups = 'drop') %>%
-  dplyr::mutate(prop = count / ifelse(suicide == 'Yes', yes_count, no_count)) %>%
-  ggplot(aes(x = value, y = prop, fill = suicide)) +
-  geom_col(position = 'dodge') +
-  facet_wrap(~var, scales = 'free') +
-  theme_bw() +
-  labs(y = 'Frequency Proportion',
-       x = element_blank(),
-       title = 'Frequency Distributions For Non-Numeric Variables') +
-  scale_y_continuous(labels = percent_format(accuracy = 1))
-
-```
-
-When interpreting the categorical bar plots, differences between `loan_status` for a given feature-level suggest that a relationship exists between a feature and the target variable. For example, we see a clear difference between the Y/N bars for `credit_history`, `married` and `property_area` whereas the is little difference for the levels of `gender` and no noticeable difference for `self_employed`.  
-
-The existence of a significant relationship between the categorical features and the target variable can be evaluated with a Chi-square test$^3$.
+From the correlation plot above, we do not see a strong relationship between the self-reported survey total scores and the new features we generated to summarize substance abuse and non-substance abuses. However, in upcoming sections we will use machine learning techniques to investigate this relationship further.
 
 
 
@@ -753,7 +848,7 @@ Gradient Boosting builds a prediction model from an ensemble of smaller 'weak le
 
 ### Data Preparation
 
-Before fitting a Gradient Boost Model, we will collect a new subset of features for this approach. Instead of including all features for individual questions on either of the summaries, we will only be using the total scores (`adhd_total` and `md_total`) because the total scores are composite features build from the scores on the questions. Additionally, the categorical responses 
+Before fitting a Gradient Boost Model, we will collect a new subset of features for this approach. Instead of including all features for individual questions on either of the summaries, we will only be using the total scores (`adhd_total` and `md_total`) because the total scores are composite features build from the scores on the questions.
 ```{r}
 ordinal_cats <- c( 'alcohol', 'thc', 'cocaine', 'stimulants', 'sedative_hypnotics', 'opioids', 'suicide',
                    'court_order', 'hx_of_violence', 'disorderly_conduct', 'non_subst_dx', 'subst_dx')
@@ -763,7 +858,6 @@ gboost_df <- df %>%
   select( -c('initial') ) %>%
   dplyr::mutate( across( all_of( ordinal_cats ), as.numeric ) )
 paste( 'number of rows:', dim( gboost_df )[1] )
-glimpse( gboost_df )
 ```
 Evaluate the presence of missing data
 ```{r}
@@ -774,7 +868,7 @@ miss_var_summary( gboost_df )
 gg_miss_upset( gboost_df )
 ```
 
-We see that the feature `psych_meds` is missing many values, so we will drop this feature from further consideration. Additionally, we see that there are approximately two dozen rows that are missing values for multiple features. Therefore, instead of imputing the missing, we will simply drop these rows.
+We see that there are approximately two dozen rows that are missing values for multiple features. Therefore, instead of imputing the missing, we will simply drop these rows.
 
 ```{r}
 gboost_df <- gboost_df %>%
