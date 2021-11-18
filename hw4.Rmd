@@ -73,6 +73,7 @@ library(factoextra)
 library(gbm)
 library(caret)
 library(gridExtra)
+library(MLmetrics)
 
 # resolve function name conflict
 conflict_prefer('filter', 'dplyr')
@@ -260,8 +261,8 @@ p1 <- ggplot( df, aes(x = age) ) +
   ggtitle( 'Age Density Plot' )
 num_obs <- dim(df)[1]
 p2 <- df %>%
-  count( sex ) %>%
-  mutate( n = n/num_obs ) %>%
+  dplyr::count( sex ) %>%
+  dplyr::mutate( n = n/num_obs ) %>%
   ggplot( aes(x=sex, y=n)) + 
   geom_bar(stat = "identity") +
   ylim( 0, 0.6 ) +
@@ -269,8 +270,8 @@ p2 <- df %>%
   ggtitle( 'Distribution  of Sex (binary)' ) +
   theme_classic()
 p3 <- df %>%
-  count( race ) %>%
-  mutate( n = n/num_obs ) %>%
+  dplyr::count( race ) %>%
+  dplyr::mutate( n = n/num_obs ) %>%
   ggplot( aes(x=race, y=n)) + 
   geom_bar(stat = "identity") +
   ylab( 'proportion' ) +
@@ -393,7 +394,7 @@ To re-represent this data, we will generate a new summary feature that sums the 
 ```{r}
 sub_df <- sub_df %>%
   mutate_if(is.factor, as.numeric) %>%
-  mutate( subst_sum = alcohol + thc + cocaine + stimulants + sedative_hypnotics + opioids )
+  dplyr::mutate( subst_sum = alcohol + thc + cocaine + stimulants + sedative_hypnotics + opioids )
 ```
 
 We can derive a similar summary variable for the non-substance abuse behaviors reported (e.g. disorderly conduct, court order etc.). Hoever, we exclude `abuse` because it has a difference and non-binary reporting criteria. 
@@ -402,7 +403,7 @@ We can derive a similar summary variable for the non-substance abuse behaviors r
 abuse_df <- df %>%
   select( c( 'suicide', 'disorderly_conduct', 'hx_of_violence', 'court_order' ) ) %>%
   mutate_if(is.factor, as.numeric) %>%
-  mutate( abuse_sum = suicide + disorderly_conduct + hx_of_violence + court_order )
+  dplyr::mutate( abuse_sum = suicide + disorderly_conduct + hx_of_violence + court_order )
 ```
 
 
@@ -464,7 +465,7 @@ plot_corr_matrix <- function(dataframe, significance_threshold){
 ```{r corrplot, fig.height = 8}
 df_feats <- df %>%
   select( c('adhd_total','md_total') ) %>%
-  mutate( subst_sum = as.integer( sub_df$subst_sum ),
+  dplyr::mutate( subst_sum = as.integer( sub_df$subst_sum ),
           abuse_sum = as.integer( abuse_df$abuse_sum ) ) %>%
   drop_na()
 
@@ -850,13 +851,14 @@ Gradient Boosting builds a prediction model from an ensemble of smaller 'weak le
 
 Before fitting a Gradient Boost Model, we will collect a new subset of features for this approach. Instead of including all features for individual questions on either of the summaries, we will only be using the total scores (`adhd_total` and `md_total`) because the total scores are composite features build from the scores on the questions.
 ```{r}
-ordinal_cats <- c( 'alcohol', 'thc', 'cocaine', 'stimulants', 'sedative_hypnotics', 'opioids', 'suicide',
+ordinal_cats <- c( 'sex', 'race', 'abuse', 'alcohol', 'thc', 'cocaine', 'stimulants', 'sedative_hypnotics', 'opioids', 'suicide',
                    'court_order', 'hx_of_violence', 'disorderly_conduct', 'non_subst_dx', 'subst_dx')
 gboost_df <- df %>%
   select( -starts_with("md_q") ) %>%
   select( -starts_with("adhd_q")) %>%
   select( -c('initial') ) %>%
-  dplyr::mutate( across( all_of( ordinal_cats ), as.numeric ) )
+  dplyr::mutate( across( all_of( ordinal_cats ), as.numeric ) ) %>%
+  dplyr::mutate( suicide = suicide-1 )
 paste( 'number of rows:', dim( gboost_df )[1] )
 ```
 Evaluate the presence of missing data
@@ -872,8 +874,8 @@ We see that there are approximately two dozen rows that are missing values for m
 
 ```{r}
 gboost_df <- gboost_df %>%
-  #select( -psych_meds ) %>%
-  drop_na()
+  drop_na() #%>%
+  #mutate_if(is.factor, as.numeric)
 paste( 'number of rows:', dim( gboost_df )[1] )
 miss_var_summary( gboost_df )
 ```
@@ -881,49 +883,95 @@ miss_var_summary( gboost_df )
 
 We will begin by splitting the data into train and test sets
 
-
-```{r data prep}
-df2 <- df 
-
-# train test split
-set.seed(101)
-trainIndex <- createDataPartition(df2$suicide,
-                                  p = 0.75,
-                                  list = F)
-
-train <- df2[trainIndex,]
-test <- df2[-trainIndex,]
-
-# cross validation train control
-ctrl <- trainControl(method = 'cv', number = 10)
-```
-
 ```{r}
-indexes = createDataPartition(gboost_df$suicide, p = .90, list = F)
+set.seed(101)
+indexes = createDataPartition(gboost_df$suicide, p = .75, list = F)
 train = gboost_df[indexes, ]
 test = gboost_df[-indexes, ]
 ```
 
+Now, we use the train split to train a generalized boosted model using the `gbm()` function for a bernoulli distribution because our target, `suicides` has only two values.
 ```{r}
 # Train model with preprocessing & repeated cv
-model_gbm <- caret::train(suicide ~ .,
-                          data = train,
-                          method = "gbm",
-                          preProcess = c("scale", "center"),
-                          trControl = trainControl(method = "repeatedcv", 
-                                                  number = 10, 
-                                                  repeats = 3, 
-                                                  verboseIter = FALSE),
-                          verbose = 0)
-print(model_gbm)
+gbm.model = gbm(suicide~., 
+                data=train, 
+                shrinkage=0.01, 
+                distribution = 'bernoulli', 
+                cv.folds=5, 
+                n.trees=3000, 
+                verbose=F)
+gbm.model
+```
+```{r}
+summary( gbm.model )
 ```
 
+From this result, we take the iteration with the best performance:
 ```{r}
-#caret::confusionMatrix(
-#  data = predict(model_gbm, test),
-#  reference = test$suicide
-#  )
+best.iter = gbm.perf(gbm.model, method = 'cv' )
 ```
+```{r}
+best.iter
+```
+
+The tree structure determined from the best performing iteration is then used to train a new model with these settings using the `caret` library.
+```{r}
+set.seed(123)
+fitControl = trainControl(method="cv", number=5, returnResamp = "all")
+
+train$suicide <- factor( train$suicide )
+
+model_bestiter = train(suicide~., 
+                       data=train, 
+                       method="gbm",
+                       distribution="bernoulli", 
+                       trControl=fitControl,
+                       verbose=F, 
+                       tuneGrid=data.frame(.n.trees=best.iter, 
+                                           .shrinkage=0.01, 
+                                           .interaction.depth=1, 
+                                           .n.minobsinnode=1))
+```
+
+
+Model Summary: 
+```{r}
+model_bestiter
+```
+
+One way to evaluate the performance of the model is by looking at the confusion matrix. This gives us an idea of how well the model performs at correctly classifying the two possible outcomes.
+```{r}
+confusionMatrix( model_bestiter )
+```
+
+Another way of evaluating the performance of our model is with a lift chart:
+```{r}
+test$suicide <- factor( test$suicide )
+testres = predict( model_bestiter, test, type = 'prob')
+testres$obs = test$suicide
+testres$pred = predict(  model_bestiter, test )
+multiClassSummary(testres, lev = levels(testres$obs))
+```
+```{r}
+test$suicide <- factor( test$suicide )
+testres = predict( model_bestiter, test, type = 'prob')
+testres$obs = test$suicide
+testres$pred = predict(  model_bestiter, test )
+multiClassSummary(testres, lev = levels(testres$obs))
+```
+```{r}
+evalResults <- data.frame(Class = test$suicide)
+evalResults$GBM <- predict( model_bestiter, test, type = "prob")[,'0']
+trellis.par.set(caretTheme())
+liftData <- caret::lift(Class ~ GBM, data = evalResults)
+plot(liftData, values = 60, auto.key = list(columns = 1,
+                                            lines = TRUE,
+                                            points = FALSE))
+```
+
+From this lift chart, we can see that to find 60% of the hits, ~55% of the data. The shaded region bounds ranges of performance for models of the data: the diagonal (longest side of the triangle) represents chance performance whereas the other two sides of the shaded triangle bound a classifier that finds all the targets for a given sample size (perfect classifier). We can see that our Gradient Boost Model performs better, but not much better than chance.  
+Perhaps an SVM classifier can perform better....
+
 
 
 ## Support Vector Machine
