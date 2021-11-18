@@ -71,7 +71,8 @@ library(pheatmap)
 library(corrplot)
 library(factoextra)
 library(gbm)
-library(caret) 
+library(caret)
+library(gridExtra)
 
 # resolve function name conflict
 conflict_prefer('filter', 'dplyr')
@@ -103,7 +104,7 @@ names(df)[ncol(df)] <- 'psych_meds'
 # raw data with renamed columns
 df_raw <- df
 
-names(df)
+names(df_raw)
 
 ```
 
@@ -202,14 +203,6 @@ From this output, we can summarize each dataset feature as follows:
 The columns `adhd_q1`-`adhd_q18` and `md_q1a`-`md_q3` are summarized by the derivative columns `adhd_total` and `md_total` respectively. The **adhd** features correspond to an ADHD self-report survey whereas the **md** features give responses to a mood disorder self-report survey. For the initial Exploratory Data Analysis, the individual questions responses will be dropped in place of visualizations and summary statistics on the derived columns, `adhd_total` and `md_total`. A detailed analysis of the individual survey questions will be taken up in the Principal Components Analysis section.
 
 
-Removing `loan_id`: this feature was found to have as many unique values as there are rows in the dataframe and is a record identification label. Therefore, we will drop this feature from the data:
-
-```{r}
-# remove loan ID
-# df <- df %>%
-#   select(-loan_id)
-```
-
 ```{r}
 # summary of each field
 initial_eda_df <- df %>%
@@ -235,93 +228,68 @@ miss_var_summary(df)
 vis_miss( df, cluster = TRUE )
 ```
 
-The figure above shows a grouped view of the missing values in each feature column. Overall, 2% of the values are missing from the dataset. Several features have no missing values (`education`, `applicantincome`, and `coapplicantincome`). Many of the features have relatively few missing values. However, the `credit_history` features is missing 8.14% of the data.
+The figure above shows a grouped view of the missing values in each feature column. Overall, 2.7% of the values are missing from the dataset. The majority of the features have no missing values. Many of the features have relatively few missing values. However, the `psych_meds` features is missing a considerable portion of the data.
 
-Explore the missing data further by using the `gg_miss_upset()` function to show patterns correlated missing values.
+```{r}
+df <- df %>%
+  select( -c(psych_meds) )
+```
+
+
+Having dropped `psych_meds`, we can now use the `gg_miss_upset()` function to look for any remaining patterns of missing values in the data.
 
 ```{r}
 gg_miss_upset( df )
 ```
 
-The figure above shows that the vast majority of rows only have a singleton missing value; this is represented by the 5 bars in the left of the plot with only one dot to indicate the missing feature. However, a small minority or rows have 2-3 missing elements; this is indicated by multiple dots under the 5 bars to the right side of the plot.  
+Both the `vis_miss()` and `gg_miss_upset()` visualization are informative, because they reveal some interesting patterns in the missing values for the data set. For instance, once we remove `psych_meds` most of the remaining rows that are not full, hold multiple missing values from a subset of the features. In other words, the remaining missing values are not randomly dispersed across the data set. Rather, they are concentrated in a subset of the features: `disorderly_conduct`, `suicide`, `abuse`, `non_subst_dx` and `subst_dx`. Notably, the responses that correspond to the ADHD and Mood Disorder self-reporting surveys are have no missing values; this knowledge will be helpful downstream. Further handling of missing values will be tailored to the analysis of each of the sections below.
 
-Since there are relatively few rows with multiple missing values, it would not adversely affect the analysis to remove them. The rest of the missing values can be dealt with by imputation. 
 
-```{r}
-# create a vector holding the sum of NAs for each row
-count_na <- apply( df, 1, function(x) sum(is.na(x)))
-# keep only the rows with less than 2 missing values
-df <- df[count_na < 2,]
-dim( df )
+### Exploratory Visualization
+
+To gain a feel for the data, we will evaluate visualizations of select features.
+
+#### Distributions of Demographic Variables
+
+Visualizing the demographic information of the mental health study
+
+```{r figDemo, fig.height = 5, fig.width = 12}
+p1 <- ggplot( df, aes(x = age) ) +
+  geom_density( fill="#69b3a2", color="#e9ecef", alpha=0.8 ) +
+  theme_classic() +
+  ggtitle( 'Age Density Plot' )
+num_obs <- dim(df)[1]
+p2 <- df %>%
+  count( sex ) %>%
+  mutate( n = n/num_obs ) %>%
+  ggplot( aes(x=sex, y=n)) + 
+  geom_bar(stat = "identity") +
+  ylab( 'proportion' ) +
+  ggtitle( 'Distribution  of Sex (binary)' ) +
+  theme_classic()
+p3 <- df %>%
+  count( race ) %>%
+  mutate( n = n/num_obs ) %>%
+  ggplot( aes(x=race, y=n)) + 
+  geom_bar(stat = "identity") +
+  ylab( 'proportion' ) +
+  ggtitle( 'Distribution  of Race' ) +
+  theme_classic() + 
+  scale_x_discrete(guide = guide_axis(n.dodge = 2))
+grid.arrange(p1, p2, p3, ncol=3)
 ```
+  
+From these visualization we learn several things about the mental health study participants:  
 
-For a simple first approximation, we will use the `simputation` package$^1$ to fill NA values for categorical and numeric features with 'hot-deck' imputation (i.e. a values pulled at random from complete cases in the dataset).
-```{r}
+1. **Age** - the age distribution is bimodal with one peak at approximate 26 and another at 46 and a range from 18 to 69 years of age.
+2. **Sex** - sex is given as a binary feature and is not equally balanced with 57% Male and 43% Female
+3. **Race** - race takes one of four values: 'White' (41%), 'African American' (57%), 'Hispanic'(.6%) and 'Other or Missing Data'(1%).
 
-# # single imputation analysis
-# df <- bind_shadow( df ) %>%
-#   data.frame() %>%
-#   simputation::impute_rhd(., credit_history ~ 1 ) %>%
-#   simputation::impute_rhd(., loan_amount_term ~ 1 ) %>%
-#   simputation::impute_rhd(., loanamount ~ 1 ) %>%
-#   simputation::impute_rhd(., self_employed ~ 1 ) %>%
-#   simputation::impute_rhd(., gender ~ 1 ) %>%
-#   simputation::impute_rhd(., dependents ~ 1 ) %>%  
-#   tbl_df()  %>%
-#   select( -c(13:24) )
+#### ADHD and Mood Disorder Survey Scores
 
-```
+Visualizing the `adhd_total` and `md_total` features. These two features give a summary score for the questions on an [ADHD Self-Reporting Survey](https://add.org/wp-content/uploads/2015/03/adhd-questionnaire-ASRS111.pdf) and a separate [Mood Disorder Questionnaire](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC314375/). 
 
-
-Confirm that we have filled all `NA` values:
-```{r}
-# return a summary table of the missing data in each column
-miss_var_summary(df)
-
-```
-
-### Distributions of Numeric Variables
-
-Now that the missing values have been imputed across the dataframe, we can explore the relationships of the variables in more depth. To start we visualize the distributions of the numeric variables grouped by the outcome of the target variable (`loan_status`): 
-
-```{r}
-# numeric distributions
-df %>%
-  select_if(is.numeric) %>%
-  bind_cols(select(df, suicide)) %>%
-  gather(var, val, -suicide) %>%
-  ggplot(aes(x = val, fill = suicide)) +
-  geom_density(alpha = .3) +
-  facet_wrap(~var, scales = 'free', ncol = 2) +
-  theme_bw() + 
-  labs(x = element_blank(),
-       y = element_blank(),
-       title = 'Distribution of Numeric Variables'
-       )
-
-```
-The distributions do not suggest any obviously significant differences when grouped by the target variable for any of the numeric features. It does not appear to be likely that either of these 3 features are correlated to `loan_status`. This can be confirmed with ANOVA$^2$:
-
-```{r}
-# # ANOVA for applicantincome
-# applicantincome.aov <- aov(applicantincome ~ loan_status, data = df)
-# # Summary of the analysis
-# summary(applicantincome.aov)
-# ```
-# ```{r}
-# # ANOVA for coapplicantincome
-# coapplicantincome.aov <- aov(coapplicantincome ~ loan_status, data = df)
-# # Summary of the analysis
-# summary(coapplicantincome.aov)
-```
-
-```{r}
-# # ANOVA for applicantincome
-# loanamount.aov <- aov(loanamount ~ loan_status, data = df)
-# # Summary of the analysis
-# summary(loanamount.aov)
-```
-The p-values for all three ANOVA tests are very high indicating that there is no significant relationship between the features variables and the target.
+#### Substance Misuse Features
 
 
 ### Correlation of Numeric Variables
@@ -409,76 +377,10 @@ When interpreting the categorical bar plots, differences between `loan_status` f
 
 The existence of a significant relationship between the categorical features and the target variable can be evaluated with a Chi-square test$^3$.
 
-```{r}
-# # Chi-square test for credit_history
-# test <- chisq.test(table(df$credit_history, df$loan_status))
-# test
-```
-```{r}
-# # Chi-square test for married
-# test <- chisq.test(table(df$married, df$loan_status))
-# test
-```
-```{r}
-# # Chi-square test for property_area
-# test <- chisq.test(table(df$property_area, df$loan_status))
-# test
-```
-
-```{r}
-# # Chi-square test for education
-# test <- chisq.test(table(df$education, df$loan_status))
-# test
-```
-```{r}
-# # Chi-square test for loan_amount_term
-# test <- chisq.test(table(df$loan_amount_term, df$loan_status))
-# test
-```
-```{r}
-# # Chi-square test for dependents
-# test <- chisq.test(table(df$dependents, df$loan_status))
-# test
-```
-```{r}
-# # Chi-square test for gender
-# test <- chisq.test(table(df$gender, df$loan_status))
-# test
-```
-
-```{r}
-# # Chi-square test for self employed
-# test <- chisq.test(table(df$self_employed, df$loan_status))
-# test
-```
-
-
-### Data Prep
-
-```{r data prep}
-# impute NA  daaaang!, sorry Leo, I didn't see that you impute the NAs here until too late
-# preproc <- preProcess(df, 'bagImpute')
-# df2 <- predict(preproc, df)
-df2 <- df 
-# %>%
-  # select( married, property_area, credit_history, education, loan_amount_term, loan_status )
-
-# train test split
-set.seed(101)
-trainIndex <- createDataPartition(df2$suicide,
-                                  p = 0.75,
-                                  list = F)
-
-train <- df2[trainIndex,]
-test <- df2[-trainIndex,]
-
-# cross validation train control
-ctrl <- trainControl(method = 'cv', number = 10)
-```
-
 
 
 ## Clustering Methods
+
 
 ### Finding K
 
@@ -666,7 +568,7 @@ Cluster 2 is less likely to experience abuse and suicide, and more likely to hav
 
 ## Principal Component Analysis
 
-In this section we will explore the ADHD data set further using Principal Component Analysis (PCA). PCA is a dimensionality reduction method that can be very useful for detecting patterns in complex, feature-rich data. At it's core, PCA is a fairly simple linear algebra manipulation, an eigendecomposition. Basically, PCA maps the data onto a new set components that consist of orthogonal axes (eigenvectors) and magnitudes (eigenvalues). Each successive component is added such that it describes as much remaining variance in the data as possible. From the resulting components we can select a subset that describe most of the variance and use this new, lower-dimensional feature space as a more convenient way to observe relationships in the data that were previously masked by the data's complexity.  
+In this section we will explore the ADHD data set further using Principal Component Analysis (PCA). PCA is a dimensionality reduction method that can be very useful for detecting patterns in complex, feature-rich data. At it's core, PCA is a fairly simple linear algebra manipulation, an eigendecomposition. Basically, PCA maps the data onto a new set of components that consist of orthogonal axes (eigenvectors) and magnitudes (eigenvalues). Each successive component is added such that it describes as much remaining variance in the data as possible. From the resulting components we can select a subset that describe most of the variance in a new, lower-dimensional feature space which is more convenient for observing relationships in the data that were previously masked by the data's complexity.  
 
 To approach this analysis, we derive 2 sets of features from the original data. Data features that correspond to 1) self-reported answers for an ADHD survey, 2) self-reported answers for a Mood Disorder survey.
 
@@ -693,11 +595,12 @@ adhd_df <- adhd_df %>%
     vars(matches("adhd_q") ), 
          funs( recode_factor( ., 'Never'=0,'Rarely'=1,'Sometimes'=2,'Often'=3,'Very Often'=4 ) ) )  %>%
   mutate_if( is.factor, as.numeric )
-paste( 'number of rows:', dim( adhd_df )[1] )
+paste( 'initial number of rows:', dim( adhd_df )[1] )
+```
 
-
+Summary of missing responses in the ADHD Self-Reporting Survey:
+```{r}
 # return a summary table of the missing data in each column
-paste( 'Summary of missing responses in the ADHD Self-Reporting Survey' )
 miss_var_summary( adhd_df )
 ```
 
@@ -706,7 +609,7 @@ We see that there is only 1 missing value, so it seems reasonable to just drop i
 # remove missing
 adhd_dna <- adhd_df %>%
   drop_na()
-paste( 'number of rows:', dim( adhd_dna )[1] )
+paste( 'after drop_na number of rows:', dim( adhd_dna )[1] )
 ```
 
 #### PCA from scratch
@@ -736,7 +639,7 @@ The values off the diagonal of the matrix describe the degree of covariance betw
 * `adhd_q5` - "How often do you fidget or squirm with your hands or feet when you have to sit down for a long time?"
 * `adhd_q13` - "How often do you feel restless or fidgety"
 
-Perhaps it is no surprise that subject who report the frequency they fidget when sitting down for a long time report a similar incidence of general fidgeting/squirming.  
+Perhaps it is no surprise that subjects who report the frequency they fidget when sitting down for a long time report a similar incidence of general fidgeting/squirming.  
 
 Another closely covarying pair of questions are #16 and #18  
 
@@ -748,7 +651,7 @@ It is equally interesting to evaluate the questions with the lowest covariance, 
 
 * `adhd_q3` - "How often do you have problems remembering appointments or obligations?"
 
-Indeed, conversation skills and the ability to remember appointments are two (subjectively) different task, so it is reasonable to not see a strong relation between the two.  
+Indeed, conversation skills and the ability to remember appointments are two (subjectively) different tasks, so it is reasonable to not see a strong relation between the two.  
 
 Moving on, the covariance matrix can now be used for an eigendecomposition to find the principal components that describe the most variance in the data
 ```{r}
@@ -784,7 +687,7 @@ ggplot( pca_res, aes( x = compnum, y = exv_cumsum ) ) +
 
 The figure above plots the cumulative explained variance of the ADHD survey questions and total score as a result of the eigendecomposition. We see that the first principal component accounts for `r paste0( round( exv_cumsum[1]*100,1 ), '%' )` of the total variance. Adding successive components gradually increases the cumulative explained variance. It takes as many as 14 components to describe 95% of the data's variance. Therefore, dimensionality reduction by way of PCA only moderately decreases the components necessary to adequately explain the data (with a threshold of 95%).
 
-### PCA using `prcomp()`
+#### PCA using `prcomp()`
 
 We can determine the principal components of the ADHD data more quickly using the `prcomp()` function from the `stats` library.
 ```{r}
@@ -815,15 +718,12 @@ md_df <- df %>%
   select( starts_with("md_") ) %>%
   select( -'md_total' ) %>%
   mutate_if( is.factor, as.numeric )
-```
 
-Checking the survey responses for missing values...
-```{r}
 # return a summary table of the missing data in each column
 miss_var_summary( md_df )
 ```
 
-Wonderful, there are no missing values, so we can proceed with PCA...
+Wonderful, there are no missing values, so we can proceed with PCA using `prcomp()`...
 ```{r}
 # use the prcomp function
 md_df.pca <- prcomp( md_df, center = TRUE, scale = TRUE )
@@ -831,11 +731,21 @@ md_df.pca <- prcomp( md_df, center = TRUE, scale = TRUE )
 summary( md_df.pca )
 ```
 
-```{r,fig.width = 14}
-ggbiplot( md_df.pca ) 
+Now to visualize the PCA biplot:
+```{r}
+ggbiplot( md_df.pca ) + xlim( -2,2 )
 ```
 
-A similar pattern emerges for the Mood Disorder survey responses. We see that all the projections again have a major component along PC1 and `md_total` aligns almost perfectly with PC1. Again, we can infer relationships between features from the biplot: `md_q1c` and `md_q3` have the widest angle separating them and are therefore the least correlated features.  
+A similar pattern emerges for the Mood Disorder survey responses. We see that all the projections again have a major component along PC1. Again, we can infer relationships between features from the biplot: `md_q1c` and `md_q3` have the widest angle separating them and are therefore the least correlated features. where:  
+
+* `md_q1c` - Has there been a period of time when (...) you felt much more self-confident than usual
+  - encoding - No:0, Yes:1
+* `md_q3` -  How much of a problem did any of these cause you - being unable to work; having family, money or legal troubles; getting into arguments or fights
+  - encoding - No Problem:0, Minor Problem:1, Moderate Problem:2, Serious Problem:3
+  
+Responses to `md_q1c` with a 'Yes' reflect a positive affect with a larger numeric value. Conversely, larger numeric values for `md_q3` are associated with a negative aspect. In light of the opposite score polarities, it is not surprising to see a lack of correlation between these two features in the PC1/PC2 space.   
+
+On major difference between the Mood Disorder and ADHD biplot is that all the feature vectors point in a negative direction in relation to PC1. This suggests inverse relationship between the features variables and PC1. You may recall from the previous section that the responses to the ADHD survey were all positive in relation to PC1.
 
 ## Gradient Boosting
 
@@ -855,7 +765,7 @@ gboost_df <- df %>%
 paste( 'number of rows:', dim( gboost_df )[1] )
 glimpse( gboost_df )
 ```
-Evaluate the presense of missing data
+Evaluate the presence of missing data
 ```{r}
 miss_var_summary( gboost_df )
 ```
@@ -868,7 +778,7 @@ We see that the feature `psych_meds` is missing many values, so we will drop thi
 
 ```{r}
 gboost_df <- gboost_df %>%
-  select( -psych_meds ) %>%
+  #select( -psych_meds ) %>%
   drop_na()
 paste( 'number of rows:', dim( gboost_df )[1] )
 miss_var_summary( gboost_df )
@@ -876,6 +786,24 @@ miss_var_summary( gboost_df )
 
 
 We will begin by splitting the data into train and test sets
+
+
+```{r data prep}
+df2 <- df 
+
+# train test split
+set.seed(101)
+trainIndex <- createDataPartition(df2$suicide,
+                                  p = 0.75,
+                                  list = F)
+
+train <- df2[trainIndex,]
+test <- df2[-trainIndex,]
+
+# cross validation train control
+ctrl <- trainControl(method = 'cv', number = 10)
+```
+
 ```{r}
 indexes = createDataPartition(gboost_df$suicide, p = .90, list = F)
 train = gboost_df[indexes, ]
