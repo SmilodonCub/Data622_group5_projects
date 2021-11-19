@@ -42,7 +42,6 @@ mark {
 knitr::opts_chunk$set(echo = T, warning = F, message = F, fig.width = 10)
 
 options(scipen = 9)
-
 ```
 <br>
 
@@ -82,10 +81,8 @@ conflict_prefer('summarize', 'dplyr')
 # import data
 url <- 'https://raw.githubusercontent.com/SmilodonCub/Data622_group5_projects/main/ADHD_data.csv'
 df <- read.csv(url, header=T, na.strings="")
-
 ```
 <br>
-
 
 ### Variable Datatypes
 
@@ -384,7 +381,8 @@ ggplot(plot_df, aes(x = value, y = count, fill = subst_dx)) +
   theme_bw() +
   labs(y = 'count',
        x = element_blank(),
-       title = 'Distributions For Substances') #+
+       title = 'Distributions For Substances') +
+  theme(axis.text.x = element_text(angle = 35, hjust = 1))
   #scale_y_continuous(labels = percent_format(accuracy = 1))
 
 ```
@@ -480,7 +478,7 @@ From the correlation plot above, we do not see a strong relationship between the
 
 ### Finding K
 
-In order to find patients of clusters, we first need to determine the number of clusters. Below, we'll use two common methods, evaluating the sum of squares and silhouette width, in order to decide how many clusters we'll use.
+In order to find patients of clusters, we first need to determine the number of clusters. Below, we'll use two common methods, evaluating the sum of squares and silhouette width, in order to decide how many clusters we'll use. Since clustering requires no null values, we'll use the bagImpute method from caret and use the raw data before each field was converted to factors.
 
 ```{r cluster data prep}
 
@@ -502,7 +500,7 @@ fviz_nbclust(df4, kmeans, method = "wss")
 
 ```
 
-Based on the sum of squares for each value of K, we can use 2 clusters as the 'elbow' point.
+Based on the sum of squares for each value of K, we can use 2 clusters as the 'elbow' point. This gives us a good starting point to determine K, but we should note that in unsupervised learning there is no definite value of k. For the purposes of this homework assignment, we'll choose one value of k and proceed with the analysis, but in real life situations, it could be helpful to try multiple values of k and analyze the results to find anything that might be interesting.
 
 #### Average Siluotte Width
 
@@ -512,13 +510,13 @@ fviz_nbclust(df4, kmeans, method = "silhouette")
 
 ```
 
-Based on the average silhouette width of clusters, we can proceed with K = 2.
+Based on the average silhouette width of clusters, the optimal number of clusters shows k = 2.
 
-In this case, both methods have a consensus on two clusters.
+Since both methods above have a consensus on two clusters, we'll proceed with calculating the clusters using k = 2 and then plot the distributions to observe and note any relative differences.
 
 ### Calculating Clusters
 
-Once the clusters are calculated, let's check the size of each cluster to make sure we're looking at different groups.
+Once the clusters are calculated, let's check the size of each cluster to make sure we're looking at different groups with enough data points.
 
 ```{r cluster calc}
 
@@ -533,7 +531,9 @@ table(df4$cluster_k2)
 
 ```
 
-Using K = 2, we created an almost even split of observations. Cluster 1 has 88 observations and cluster 2 has 87.
+Using k = 2, we created an almost even split of observations. Cluster 1 has 88 observations and cluster 2 has 87.
+
+Note that when this file is run, the cluster numbers may switch or possibly form different clusters altogther. We used the paramter nstart = 25, which increases the chance that we'll end up with the same cluster. It's possible that the algorithm ends up with a very close vote, like 12 to 13 or 11 to 14 -- which could lead to different clusters and not just switched cluster labels.
 
 #### ADHD Total vs Suicide Plot
 
@@ -544,7 +544,7 @@ fviz_cluster(cluster_k2, data = df4, c('adhd_total', 'suicide'))
 
 ```
 
-The clusters created show a clear delineation for respondents based on `adhd_total`. This suggests that the clusters are separated based on levels of ADHD.
+The clusters created show a clear delineation for respondents based on `adhd_total`. This suggests that the clusters are separated based on levels of ADHD. Note that the variables have not been scaled. Since the ADHD total has a wider variance than each of the individual adhd question variables, it's likely that different clusters would be formed if all the data was scaled. This could really affect the forming of the clusters since the variance of the total variable is much larger than a single question, which may range from 0-4.
 
 #### Mood Disorder Total vs Suicide Plot
 
@@ -555,11 +555,11 @@ fviz_cluster(cluster_k2, data = df4, c('md_total', 'suicide'))
 
 ```
 
-The results of the k2 cluster show considerable overlap based on `md_total`. This means that the clusters aren't separated by mood disorder levels.
+The results of the k2 cluster show considerable overlap based on `md_total`. This means that the clusters aren't separated by mood disorder levels. Note that the mood disorder total variable is not scaled, similar to the ADHD total variable. Because the clusters are overlapped, that tells us that the cluster weren't formed simply because of the wide variance, but rather because these two clusters have differences in other ways.
 
 ### Relative Cluster Differences
 
-Let's examine relative distributions for each cluster and variable.
+Let's examine relative distributions for each cluster and variable. We decided to use probability density charts because we're most interested in relative differences in proportion of the clusters.
 
 ```{r cluster plot function}
 
@@ -602,7 +602,7 @@ cluster_plot(1,3)
 
 ```
 
-- Cluster 1 show a bimodal distribution of age, with modes as 25 and 45 years old. Cluster 2 has fewer younger people with a higher single mode.
+- Cluster 1 shows a bimodal distribution of age, with modes near 25 and 45. Cluster 2 has fewer younger people with a higher single mode, near 45 years of age.
 - Cluster 2 is more likely to be African American.
 - Cluster 1 is more likely to be female and Cluster 2 is more likely to be male.
 
@@ -624,7 +624,7 @@ cluster_plot(23,38)
 
 ```
 
-Some questions have similiar distributions, but generally overall as well as altogether, cluster 1 is more likely to report higher in mood disorders.
+Some questions have similiar distributions, but generally overall as well as altogether, cluster 1 is more likely to report higher levels of mood disorders.
 
 #### Substance Abuse
 
@@ -634,11 +634,13 @@ cluster_plot(39,44)
 
 ```
 
+There are different drug use patterns for both of the classes depending on the type of drug.
+
 - Alcohol: Both clusters show similar usage patterns for alcohol, with cluster 1 having a slightly higher chance of using, abusing, and being dependent. Cluster 2 has a higher chance of not drinking.
 - Cocaine: Cluster 1 is twice as likely as cluster 2 to not use cocaine and cluster 2 has a relatively slightly higher chance of being dependent.
 - Opioids: Cluster 2 has a higher chance of not using.
 - Sedative Hypnotics: Cluster 2 has a slighly higher chance of not using.
-- Stimulants: Cluster 2 mostly does not use.
+- Stimulants: Cluster 2 is approximately twice as likely to not use stimulants.
 - THC: Cluster 1 more likely to both not use and also to be dependent.
 
 #### Substance Abuse Levels
@@ -659,7 +661,7 @@ cluster_plot(45,50)
 
 ```
 
-Cluster 2 is less likely to experience abuse and suicide, and more likely to have a history of violence and be charged with disorderly conduct
+Cluster 2 is less likely to experience abuse and suicide, and more likely to have a history of violence and be charged with disorderly conduct.
 
 
 ## Principal Component Analysis
@@ -976,6 +978,235 @@ Perhaps an SVM classifier can perform better....
 
 ## Support Vector Machine
 
+In this section we'll start training a model using the linear kernel, with all the available variables and use that as a benchmark for any other SVM models we may train. The idea is to minimize test error and maximize interpretability. In the real world, being able to interpret the model will help one explain what makes the model work, but in some cases understanding how the model works takes a back seat to pure predictive power. This model won't be used to make any life altering predictions, so we'll discuss the results along the way.
+
+We'll reuse the same dataframe used in the earlier clustering section to create training and test sets in order to preserve as many rows as possible. As a quick reminder, the raw data had the `psych_meds` field omitted, and the rest of the missing values imputed using the `bagImpute` method. The only adjustment we will make will be to exclude any observations without suicide data in order to avoid any confounding assumptions. We'll also be setting the tune length to 8, which is an arbitrary choice. We would like to set the number high enough to tune through a number of variations, but not too high where it would take too much processing power and time to train one model.
+
+All models below will be trained using 10 fold cross validation and will have all variables centered and scaled before training. Using a 75/25 split leaves us with 122 training and 40 test observations. Note that the bag impute method fills in decimals where the variable may refer to a question with discrete answers. This may not be ideal, but is acceptable because each of the questions follow a similar scale of none/low to more/high in increasing order.
+
+Finally, the last thing to note is that the dataset we're working with has about 30% of observations flagged for suicide.
+
+```{r train test split df4}
+
+df5 <- df3 %>%
+  filter(!is.na(suicide)) %>%
+  select(-psych_meds)
+
+bag_imp <- preProcess(df5, 'bagImpute')
+df6 <- predict(bag_imp, df5)
+
+df6$suicide <- factor(df6$suicide)
+
+set.seed(101)
+trainIndex <- createDataPartition(df6$suicide,
+                                  p = 0.75,
+                                  list = F)
+
+train <- df6[trainIndex,]
+test <- df6[-trainIndex,]
+
+ctrl <- trainControl(method = 'cv', number = 10)
+tune_length <- 8
+
+```
+
+### All Variables
+
+#### SVM Linear, All Variables
+
+```{r svm linear all vars}
+
+svm_linear <- train(suicide ~ .,
+                    data = train,
+                    method = 'svmLinear',
+                    preProc = c('center', 'scale'),
+                    tuneLength = tune_length,
+                    trControl = ctrl
+                    )
+
+test$svm_linear <- predict(svm_linear, test)
+
+svm_linear
+
+```
+
+Here are the results from the first SVM linear model show about 66% accuracy on the training data, which is not a great start. For a classification model with 30% suicides, we can reach 70% accuracy by guessing that no one commits suicide. The model doesn't seem to be predicting all negatives, but still isn't very accurate. We'll calculate the predictions on the test data and compare the test error after all the SVM models are built.
+
+#### SVM Poly, All Variables
+
+Next, let's train another SVM model with the same parameters as the linear model, only changing the method to use a polynomial to see if we can reach higher levels of accuracy. By keeping all the conditions the same except for the method, we can see which method fits better and is a more appropriate choice.
+
+```{r svm poly all vars}
+
+svm_poly <- train(suicide ~ .,
+                  data = train,
+                  method = 'svmPoly',
+                  preProc = c('center', 'scale'),
+                  tuneLength = tune_length,
+                  trControl = ctrl
+                  )
+
+test$svm_poly <- predict(svm_poly, test)
+
+x <- svm_poly$bestTune %>%
+  row.names()
+
+svm_poly$results[x,]
+
+```
+
+Looking at the results of the best model above, the tuned polynomial method produced a higher level of accuracy, around 75%. Although the results were slightly better than the linear model, we can't make the case that this model is better before looking at the relative test errors.
+
+#### SVM Radial, All Variables
+
+The next method we'll try is the radial method. This will allow for a circular boundary rather than a straight or curved line.
+
+
+```{r svm radial all vars}
+
+svm_radial <- train(suicide ~ .,
+                    data = train,
+                    method = 'svmRadial',
+                    preProc = c('center', 'scale'),
+                    tuneLength = tune_length,
+                    trControl = ctrl
+                    )
+
+test$svm_radial <- predict(svm_radial, test)
+
+x <- svm_radial$bestTune %>%
+  row.names()
+
+svm_radial$results[x,]
+
+```
+
+Looking at the results above, the radial method produced a comparable model with about 72% accuracy. This model performed better than the linear model and worse than the polynomial method, with all 3 models within similar range. 
+
+If one of the two methods performed significantly better than the other, we could move forward and stick with that method. The next step we'll take is to reconsider the variables included and then run the models again. If we were short on time and resources, it would make sense to continue with just the best performing polynomial method, but since we're experimenting and exploring here, we'll run all three methods again and see what we get.
+
+Also note while writing up this report, each model was run multiple times and the results were not consistent for each model. It's possible that the accuracy levels and results shown may vary when producing the final report.
+
+### Limited Variables
+
+When building models, collinearity and noise can present hurdles to creating a production quality model. Maybe one day we'll have computers that are fast enough to train every single combination of variables and pick the best one, but for now we're going to consider all of the variables and decide which ones to move forward with.
+
+It would make sense for us to try excluding all of the individual ADHD and mood disorder questions, since the totals for each respective state of mind allows us to get a higher level view of these variables. Below, we'll create a copy of the training dataset excluding the individual questions, the retrain the three types of SVM models and evaluate the training results.
+
+Finally, we'll compare the test results for each of the 6 models.
+
+#### Training DataFrame v2
+
+```{r train v2}
+
+train2 <- train %>%
+  select(age, sex, race, adhd_total, md_total) %>%
+  bind_cols(train[,39:52])
+
+```
+
+#### SVM Linear v2
+
+```{r svm linear2}
+
+svm_linear2 <- train(suicide ~ .,
+                     data = train2,
+                     method = 'svmLinear',
+                     preProc = c('center', 'scale'),
+                     tuneLength = tune_length,
+                     trControl = ctrl
+                     )
+
+test$svm_linear2 <- predict(svm_linear2, test)
+
+svm_linear2
+
+```
+
+Looking at the results of the 2nd linear SVM model, the accuracy is about the same as the first, but it doesn't seem like much of an improvement. Based on these results alone, it doesn't look like we've gained any predictive power, but we have improved the overall interpretability.
+
+#### SVM Polynomial v2
+
+```{r svm poly2}
+
+svm_poly2 <- train(suicide ~ .,
+                   data = train2,
+                   method = 'svmPoly',
+                   preProc = c('center', 'scale'),
+                   tuneLength = tune_length,
+                   trControl = ctrl
+                   )
+
+test$svm_poly2 <- predict(svm_poly2, test)
+
+x <- svm_poly2$bestTune %>%
+  row.names()
+
+svm_poly2$results[x,]
+
+```
+
+The 2nd polynomial SVM model has the highest accuracy so far of all models with a slight lead. This model is comparable to the 1st polynomial SVM, giving additional evidence that the omission of the individual ADHD and mood disorder questions is mainly adding value by creating relatively easier to interpret models.
+
+#### SVM Radial v2
+
+```{r svm radial2}
+
+svm_radial2 <- train(suicide ~ .,
+                     data = train2,
+                     method = 'svmRadial',
+                     preProc = c('center', 'scale'),
+                     tuneLength = tune_length,
+                     trControl = ctrl
+                     )
+
+test$svm_radial2 <- predict(svm_radial2, test)
+
+x <- svm_radial2$bestTune %>%
+  row.names()
+
+svm_radial$results[x,]
+
+```
+
+The second radial model using fewer variables has seen a considerable drop in accuracy. We will need to check the test error of the models to be certain that the accuracy of the model has truly dropped.
+
+### SVM Test Errors
+
+```{r svm test results}
+
+data.frame(rbind(
+  postResample(test$svm_linear, test$suicide),
+  postResample(test$svm_poly, test$suicide),
+  postResample(test$svm_radial, test$suicide),
+  postResample(test$svm_linear2, test$suicide),
+  postResample(test$svm_poly2, test$suicide),
+  postResample(test$svm_radial2, test$suicide)
+),
+row.names = c('SVM linear, all variables', 
+              'SVM poly, all variables',
+              'SVM radial, all variables', 
+              'SVM linear, limited', 
+              'SVM poly, limited',
+              'SVM radial, limited'
+              )
+)
+
+```
+
+When looking at the accuracy of all 6 models on the test data, we can tell that no single model stands out. With all models reaching approximately 70% accuracy, we're about the same level of accuracy compared to always predicting that no one commits suicide.
+
+
+```{r}
+
+library(GGally)
+
+ggpairs(train2,
+        mapping=ggplot2::aes(colour = suicide, alpha = 0.3))
+
+```
+
+Next, we tried a pairs plot to look for any obvious separations. The idea is to check for any possible two variable combinations where we could clearly separate people who had attempted suicide or not. This method is limited to two dimensions as it's difficult to visualize higher dimensions.
 
 
 ## References
