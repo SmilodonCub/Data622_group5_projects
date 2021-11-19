@@ -152,6 +152,9 @@ df$subst_dx <- factor(df$subst_dx, levels = c(0,1,2,3), labels = c('None','One',
 # Psychiatric Meds
 df$psych_meds <- factor(df$psych_meds, levels = c(0,1,2), labels = c('None','One','More than one'))
 
+# copy df
+df_raw2 <- df
+
 # str(df)
 
 ```
@@ -980,37 +983,52 @@ Perhaps an SVM classifier can perform better....
 
 In this section we'll start training a model using the linear kernel, with all the available variables and use that as a benchmark for any other SVM models we may train. The idea is to minimize test error and maximize interpretability. In the real world, being able to interpret the model will help one explain what makes the model work, but in some cases understanding how the model works takes a back seat to pure predictive power. This model won't be used to make any life altering predictions, so we'll discuss the results along the way.
 
-We'll reuse the same dataframe used in the earlier clustering section to create training and test sets in order to preserve as many rows as possible. As a quick reminder, the raw data had the `psych_meds` field omitted, and the rest of the missing values imputed using the `bagImpute` method. The only adjustment we will make will be to exclude any observations without suicide data in order to avoid any confounding assumptions. We'll also be setting the tune length to 8, which is an arbitrary choice. We would like to set the number high enough to tune through a number of variations, but not too high where it would take too much processing power and time to train one model.
+We'll create new training and test sets in order to preserve as many rows as possible. The raw data will have the `initial` and `psych_meds` fields omitted, and the rest of the observations with any missing values will be omitted. We'll also be setting the tune length to 8, which is an arbitrary choice. We would like to set the number high enough to tune through a number of variations, but not too high where it would take too much processing power and time to train one model.
 
-All models below will be trained using 10 fold cross validation and will have all variables centered and scaled before training. Using a 75/25 split leaves us with 122 training and 40 test observations. Note that the bag impute method fills in decimals where the variable may refer to a question with discrete answers. This may not be ideal, but is acceptable because each of the questions follow a similar scale of none/low to more/high in increasing order.
+All models below will be trained using 10 fold cross validation and will have all variables centered and scaled before training. Using a 75/25 split leaves us with 106 training and 35 test observations. Note that the bag impute method fills in decimals where the variable may refer to a question with discrete answers. This may not be ideal, but is acceptable because each of the questions follow a similar scale of none/low to more/high in increasing order.
 
 Finally, the last thing to note is that the dataset we're working with has about 30% of observations flagged for suicide.
 
 ```{r train test split df4}
 
-df5 <- df3 %>%
-  filter(!is.na(suicide)) %>%
-  select(-psych_meds)
-
-bag_imp <- preProcess(df5, 'bagImpute')
-df6 <- predict(bag_imp, df5)
-
-df6$suicide <- factor(df6$suicide)
+df5 <- df_raw2 %>%
+  select(-initial, -psych_meds) %>%
+  na.omit
 
 set.seed(101)
-trainIndex <- createDataPartition(df6$suicide,
+trainIndex <- createDataPartition(df5$suicide,
                                   p = 0.75,
                                   list = F)
 
-train <- df6[trainIndex,]
-test <- df6[-trainIndex,]
+train <- df5[trainIndex,]
+test <- df5[-trainIndex,]
 
 ctrl <- trainControl(method = 'cv', number = 10)
 tune_length <- 8
 
 ```
 
+### Pairs Plot
+
+```{r}
+
+library(GGally)
+
+# excluding individual questions for pairs plot
+df6 <- df5 %>%
+  select(age, sex, race, adhd_total, md_total) %>%
+  bind_cols(df5[,39:52])
+
+ggpairs(df6,
+        mapping=ggplot2::aes(colour = suicide, alpha = 0.3))
+
+```
+
+The first step we took is to generate a pairs plot to look for any obvious separations. The idea is to visually identify any possible variable combinations where we could clearly separate people who had attempted suicide or not. Unfortunately this method is limited to two dimensions as it's difficult to visualize higher dimensions and looking at the chart above, there aren't any obvious separations we can make.
+
 ### All Variables
+
+In this section, we'll train 3 SVM models (linear, polynomial, radial) with all available variables. Since support vector machines
 
 #### SVM Linear, All Variables
 
@@ -1055,7 +1073,7 @@ svm_poly$results[x,]
 
 ```
 
-Looking at the results of the best model above, the tuned polynomial method produced a higher level of accuracy, around 75%. Although the results were slightly better than the linear model, we can't make the case that this model is better before looking at the relative test errors.
+Looking at the results of the best model above, the tuned polynomial method produced a higher level of accuracy, around 70%. Although the results were slightly better than the linear model, we can't make the case that this model is better before looking at the relative test errors.
 
 #### SVM Radial, All Variables
 
@@ -1081,7 +1099,7 @@ svm_radial$results[x,]
 
 ```
 
-Looking at the results above, the radial method produced a comparable model with about 72% accuracy. This model performed better than the linear model and worse than the polynomial method, with all 3 models within similar range. 
+Looking at the results above, the radial method produced a comparable model with about 49% accuracy. This model performed better than the linear model and worse than the polynomial method, with all 3 models within similar range. 
 
 If one of the two methods performed significantly better than the other, we could move forward and stick with that method. The next step we'll take is to reconsider the variables included and then run the models again. If we were short on time and resources, it would make sense to continue with just the best performing polynomial method, but since we're experimenting and exploring here, we'll run all three methods again and see what we get.
 
@@ -1105,6 +1123,8 @@ train2 <- train %>%
 
 ```
 
+We created another dataframe object here to make things easier downstream. Instead of specifically selecting all of the variables, this object, `train2`, is a copy of `train1` without the individual question variables.
+
 #### SVM Linear v2
 
 ```{r svm linear2}
@@ -1123,7 +1143,7 @@ svm_linear2
 
 ```
 
-Looking at the results of the 2nd linear SVM model, the accuracy is about the same as the first, but it doesn't seem like much of an improvement. Based on these results alone, it doesn't look like we've gained any predictive power, but we have improved the overall interpretability.
+Looking at the results of the 2nd linear SVM model, the accuracy is much worse than the first, and is worse than predicting all no suicide attempts. Based on these results alone, it doesn't look like we've gained any predictive power, even though we have improved the overall interpretability.
 
 #### SVM Polynomial v2
 
@@ -1146,7 +1166,7 @@ svm_poly2$results[x,]
 
 ```
 
-The 2nd polynomial SVM model has the highest accuracy so far of all models with a slight lead. This model is comparable to the 1st polynomial SVM, giving additional evidence that the omission of the individual ADHD and mood disorder questions is mainly adding value by creating relatively easier to interpret models.
+The 2nd polynomial SVM model has the simliar levels of accuracy to all earlier models. This model is comparable to the 1st polynomial SVM, giving additional evidence that the omission of the individual ADHD and mood disorder questions is mainly adding value by creating relatively easier to interpret models.
 
 #### SVM Radial v2
 
@@ -1169,9 +1189,9 @@ svm_radial$results[x,]
 
 ```
 
-The second radial model using fewer variables has seen a considerable drop in accuracy. We will need to check the test error of the models to be certain that the accuracy of the model has truly dropped.
+Again, the second radial model using fewer variables has no obvious advantage in predictive training accuracy. We will need to check the test error of every model to decide which one would be best to use for future predictions.
 
-### SVM Test Errors
+### SVM Test Evaluation
 
 ```{r svm test results}
 
@@ -1194,19 +1214,76 @@ row.names = c('SVM linear, all variables',
 
 ```
 
-When looking at the accuracy of all 6 models on the test data, we can tell that no single model stands out. With all models reaching approximately 70% accuracy, we're about the same level of accuracy compared to always predicting that no one commits suicide.
+When looking at the accuracy of all 6 models on the test data, it looks like the SVM polynomial model trailed with all variables is showing the highest accuracy on the test data. With all models reaching approximately 70% accuracy, we're about the same level of accuracy compared to always predicting that no one commits suicide. If we had to decide which model to use going forward, we would pick the SVM polynomial with 77% accuracy, however we should note that there weren't a large number of observations altogether and when the training the models above, the accuracy of each of the methods varied around the same range when trained multiple times.
 
 
-```{r}
+```{r, eval = F}
 
-library(GGally)
+### This section was inspired by the pairs plot... it was difficult to read that plot, so the 2 dimensional scatter plots were generated individually
 
-ggpairs(train2,
-        mapping=ggplot2::aes(colour = suicide, alpha = 0.3))
+var_count <- ncol(train2)
+
+# pair plot, one at a time
+c <- 1
+for (i in 1:var_count) {
+  for (j in (i+1):var_count) {
+    if (i == 16 | j == 16) {
+      
+    } else {
+      print(str_c(c, ": ", i, ', ', j))
+      
+      temp_df <- train2[,c(i,j,16)]
+      temp_names <- names(temp_df)
+      names(temp_df) <- c('x', 'y', 'suicide')
+      
+      print(temp_names[1:2])
+      
+      p <- ggplot(temp_df, aes(x = x, y = y, color = suicide)) +
+        geom_jitter(alpha = 0.7) +
+        labs(x = temp_names[1],
+             y = temp_names[2])
+      
+      print(p)
+        
+      readline(prompt="Press [enter] to continue")
+      c <- c + 1
+    }
+  }
+}
+
+
+
+# pair plot, one variable vs the others as facets
+for (i in 1:var_count) {
+  if (i != 16) {
+   
+    temp_df <- train2[i:var_count]
+    
+    if (i > 16) {
+      temp_df <- temp_df %>%
+        bind_cols(train2[16])
+    }
+    
+    temp_ncol <- ncol(temp_df)
+    
+    fixed_var <- names(temp_df)[1]
+    names(temp_df)[1] <- 'x'
+    
+    p <- temp_df %>%
+      gather(var, val, -x, -suicide) %>%
+      ggplot(aes(x = x, y = val, color = suicide)) +
+      geom_jitter(alpha = 0.7) +
+      facet_wrap(~var, scales = 'free') +
+      labs(x = fixed_var)
+    
+    print(p)
+    readline(prompt="Press [enter] to continue")
+
+  }
+}
+
 
 ```
-
-Next, we tried a pairs plot to look for any obvious separations. The idea is to check for any possible two variable combinations where we could clearly separate people who had attempted suicide or not. This method is limited to two dimensions as it's difficult to visualize higher dimensions.
 
 
 ## References
