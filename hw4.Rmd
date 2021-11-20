@@ -166,7 +166,7 @@ The following code will quantitatively and visually explore the nature of the da
 
 We begin by describing the dataset features.
 
-Use `dplyr`'s `glimpse()` function to take a quick look at the data structure. Followed by `Hmisc`'s `describe()` function to return some basic summary statistics about the dataframe features:
+Use `dplyr`'s `glimpse()` function to take a quick look at the data structure:
 
 ```{r}
 # quick look at what the data structure looks like
@@ -201,7 +201,7 @@ From this output, we can summarize each dataset feature as follows:
 |         53         |      `subst_dx`      |                           (categorical): ordinal values                           |
 |         54         |     `psych_meds`     |                           (categorical): ordinal values                           |
 
-The columns `adhd_q1`-`adhd_q18` and `md_q1a`-`md_q3` are summarized by the derivative columns `adhd_total` and `md_total` respectively. The **adhd** features correspond to an ADHD self-report survey whereas the **md** features give responses to a mood disorder self-report survey. For the initial Exploratory Data Analysis, the individual questions responses will be dropped in place of visualizations and summary statistics on the derived columns, `adhd_total` and `md_total`. A detailed analysis of the individual survey questions will be taken up in the Principal Components Analysis section.
+The columns `adhd_q1`-`adhd_q18` and `md_q1a`-`md_q3` are summarized by the derivative columns `adhd_total` and `md_total` respectively. The **adhd** features correspond to an ADHD self-report survey whereas the **md** features give responses to a mood disorder self-report survey. For the initial Exploratory Data Analysis, the individual question responses will be dropped in place of visualizations and summary statistics on the derived columns, `adhd_total` and `md_total`. A detailed analysis of the individual survey questions will be taken up in the Principal Components Analysis section.
 
 Next, we visualize the extent of the missing values using the `naniar` library.
 
@@ -330,7 +330,7 @@ ggplot(df, aes(x=md_total, y=adhd_total)) +
   ggtitle('ADHD total ~ Mood Disorder total')
 ```
 
-We can evaluate the fit of a linear model to the data:
+We can evaluate the fit of a linear model to the data via the summary report and diagnostic plots:
 ```{r}
 fit = lm( adhd_total ~ md_total, df )
 summary( fit )
@@ -342,9 +342,8 @@ p4 <- plot(fit, which=4)
 par(mfrow = c(1, 1))
 ```
 
-The fit is statistically significant and the diagnostics suggest that the assumptions for linearity are reasonably met. Therefore, we can say with confidence that for a given point increase in Mood Disorder Score, the average ADHD score increases 1.7769 points.  
+The fit is statistically significant and the diagnostics suggest that the assumptions for linearity are reasonably met. Therefore, we can say with confidence that for a given point increase in Mood Disorder Score, the average ADHD score increases 1.7769 points. 
 
-For an EDA of the individual question responses for both the Mood Disorder and ADHD self-reporting surveys, please see the PCA section.
 
 #### Substance Misuse and other Features
 
@@ -763,7 +762,7 @@ components <- eig$vectors
 explained_variance
 ```
 
-Now, by storing the eigen values in a dataframe, we can explore the amount of variance explained by the PCA components. Furthermore, we find the ratio of explained variance by normalizing the cumulative variance of the components
+Now, by storing the eigenvalues in a dataframe, we can explore the amount of variance explained by each PCA component. Furthermore, we find the ratio of explained variance by normalizing the cumulative variance of the components
 ```{r}
 compnum <- 1:length( explained_variance )
 exv_cumsum <- cumsum( explained_variance )/length( explained_variance )
@@ -907,9 +906,14 @@ gbm.model = gbm(suicide~.,
                 verbose=F)
 gbm.model
 ```
+
+Using the `summary()` on the `gbm` object returns information about the relative influence of each feature variable which is a measure of importance of each variable for training the model.
+
 ```{r}
 summary( gbm.model )
 ```
+
+We see that `adhd_total`, `age`, `md_total`, `abuse` and `subst_dx` have the highest influence on training the grandient boost model
 
 From this result, we take the iteration with the best performance:
 ```{r}
@@ -939,7 +943,7 @@ model_bestiter = train(suicide~.,
 ```
 
 
-Model Summary: 
+Best Iteration Model Summary: 
 ```{r}
 model_bestiter
 ```
@@ -950,13 +954,6 @@ confusionMatrix( model_bestiter )
 ```
 
 Another way of evaluating the performance of our model is with a lift chart:
-```{r}
-test$suicide <- factor( test$suicide )
-testres = predict( model_bestiter, test, type = 'prob')
-testres$obs = test$suicide
-testres$pred = predict(  model_bestiter, test )
-multiClassSummary(testres, lev = levels(testres$obs))
-```
 ```{r}
 test$suicide <- factor( test$suicide )
 testres = predict( model_bestiter, test, type = 'prob')
@@ -1288,6 +1285,5 @@ for (i in 1:var_count) {
 
 ## References
 
-1. [ADHD symptoms and suicide attempts in adults with mood disorders: An observational naturalistic study](https://www.sciencedirect.com/science/article/pii/S2666915321001505)
-2. [The Adult ADHD Self-Reporting Scale Symptoms Checklist](https://add.org/wp-content/uploads/2015/03/adhd-questionnaire-ASRS111.pdf)
-3. [Mood Disorder Questionnaire](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC314375/)
+1. [The Adult ADHD Self-Reporting Scale Symptoms Checklist](https://add.org/wp-content/uploads/2015/03/adhd-questionnaire-ASRS111.pdf)
+2. [Mood Disorder Questionnaire](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC314375/)
