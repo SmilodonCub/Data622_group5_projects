@@ -1,0 +1,136 @@
+---
+title: "Mental Health Survey"
+subtitle: "Homework 4 Data 622 Section 2 Group 5"
+author: "Bonnie Cooper, Leo Yi"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: yes
+    toc_depth: 4
+    toc_float: yes
+    number_sections: no
+    theme: paper
+    highlight: tango
+    font-family: Consolas
+    code_folding: hide
+  pdf_document:
+    toc: yes
+---
+
+```{=html}
+<style type="text/css">
+
+code {
+  font-family: "Consolas";
+  font-size: 11px;
+}
+
+pre {
+  font-family: "Consolas";
+  font-size: 11px;
+}
+
+mark {
+  background-color: whitesmoke;
+  color: black;
+}
+
+</style>
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = T, warning = F, message = F, fig.width = 10)
+
+options(scipen = 9)
+```
+<br>
+
+## Introduction
+
+* PCA on fashion MNIST to reduce dimensionality
+* hierarchical clustering?
+
+About Fashion MNIST:  
+* 70,000 grayscale images
+* 10 distinct image categories
+* each image is 28x28 pixels (785 features)
+
+### Import Data
+
+To begin, the following code will import the data and load the libraries:
+
+```{r import}
+library(keras)
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+```
+
+
+```{r}
+show_digit = function(arr784, col = gray(12:1 / 12), ...) {
+  image(matrix(as.matrix(arr784[-785]), nrow = 28)[, 28:1], col = col, ...)
+}
+
+# load image files
+load_image_file = function(filename) {
+  ret = list()
+  f = file(filename, 'rb')
+  readBin(f, 'integer', n = 1, size = 4, endian = 'big')
+  n    = readBin(f, 'integer', n = 1, size = 4, endian = 'big')
+  nrow = readBin(f, 'integer', n = 1, size = 4, endian = 'big')
+  ncol = readBin(f, 'integer', n = 1, size = 4, endian = 'big')
+  x = readBin(f, 'integer', n = n * nrow * ncol, size = 1, signed = FALSE)
+  close(f)
+  data.frame(matrix(x, ncol = nrow * ncol, byrow = TRUE))
+}
+
+# load label files
+load_label_file = function(filename) {
+  f = file(filename, 'rb')
+  readBin(f, 'integer', n = 1, size = 4, endian = 'big')
+  n = readBin(f, 'integer', n = 1, size = 4, endian = 'big')
+  y = readBin(f, 'integer', n = n, size = 1, signed = FALSE)
+  close(f)
+  y
+}
+```
+
+
+```{r}
+# load images
+train = load_image_file("/home/bonzilla/Documents/MSDS/fashion-mnist/data/fashion/train-images-idx3-ubyte")
+test  = load_image_file("/home/bonzilla/Documents/MSDS/fashion-mnist/data/fashion/t10k-images-idx3-ubyte")
+
+# load labels
+train$y = as.factor(load_label_file("/home/bonzilla/Documents/MSDS/fashion-mnist/data/fashion/train-labels-idx1-ubyte"))
+test$y  = as.factor(load_label_file("/home/bonzilla/Documents/MSDS/fashion-mnist/data/fashion/t10k-labels-idx1-ubyte"))
+```
+
+
+```{r}
+# view test image
+show_digit(train[20000, ])
+```
+
+```{r}
+# We plot 16 cherry-picked images from the training set
+par(mfrow=c(4, 4), mar=c(0, 0.2, 1, 0.2))
+for (i in 1:16) {
+  nr <- i * 10
+  show_digit(train[i, ])
+}
+```
+
+
+## PCA
+
+```{r}
+
+```
+
+
+
+## References
+
+* [load the MNIST handwritten digits dataset into R as a tidy data frame](https://gist.github.com/daviddalpiaz/ae62ae5ccd0bada4b9acd6dbc9008706)
