@@ -69,7 +69,7 @@ library(ggplot2)
 
 ```{r}
 show_digit = function(arr784, col = gray(12:1 / 12), ...) {
-  image(matrix(as.matrix(arr784[-785]), nrow = 28)[, 28:1], col = col, ...)
+  image(matrix(as.matrix(arr784[-785]), nrow = 28)[, 28:1], col = col, labels=FALSE, xaxt = "n", yaxt = "n", ...)
 }
 
 # load image files
@@ -148,7 +148,6 @@ Visualizing the cumulative explained variance described by the principal compone
 ggplot( df, aes( x = compnum, y = Cumulative.Proportion ) ) +
   geom_line() +
   ylim( c(0,1.1) ) +
-  #scale_x_continuous(breaks = seq(0, length( explained_variance ), by = 1)) +
   geom_hline( yintercept = 0.95, linetype = 'dotted', col = 'red') +
   annotate("text", x = 2, y = 0.98, 
            label = expression( "95%" ~ sigma), vjust = -0.5) +
@@ -157,6 +156,41 @@ ggplot( df, aes( x = compnum, y = Cumulative.Proportion ) ) +
   ylab( 'Cummulative Explained Variance' ) +
   ggtitle( 'Scree Plot: Explained Variance of Principal Components' )
 ```
+
+How many components account for 95% of the variance in the data?
+```{r}
+comp95 <- min(which(df$Cumulative.Proportion>=0.95))
+comp95
+```
+
+Find truncated version of the data from the projections onto the first `r comp95` components
+```{r}
+trunc <- train.pca$x[,1:comp95] %*% t(train.pca$rotation[,1:comp95])
+
+#and add the center (and re-scale) back to data
+if(train.pca$scale != FALSE){
+	trunc <- scale(trunc, center = FALSE , scale=1/train.pca$scale)
+}
+if(train.pca$center != FALSE){
+    trunc <- scale(trunc, center = -1 * train.pca$center, scale=FALSE)
+}
+dim(trunc); dim(train)
+```
+
+Visualize the PCA smoothed images
+```{r}
+par(mfrow=c(4, 4), mar=c(0, 0.2, 1, 0.2))
+for (i in 1:8) {
+  nr <- i * 10
+  show_digit(train[i, ])
+}
+for (i in 1:8) {
+  nr <- i * 10
+  show_digit(trunc[i, ])
+}
+```
+
+
 
 
 ## References
