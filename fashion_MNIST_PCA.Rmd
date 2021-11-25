@@ -103,8 +103,8 @@ train = load_image_file("/home/bonzilla/Documents/MSDS/fashion-mnist/data/fashio
 test  = load_image_file("/home/bonzilla/Documents/MSDS/fashion-mnist/data/fashion/t10k-images-idx3-ubyte")
 
 # load labels
-train$y = as.factor(load_label_file("/home/bonzilla/Documents/MSDS/fashion-mnist/data/fashion/train-labels-idx1-ubyte"))
-test$y  = as.factor(load_label_file("/home/bonzilla/Documents/MSDS/fashion-mnist/data/fashion/t10k-labels-idx1-ubyte"))
+train_y = as.factor(load_label_file("/home/bonzilla/Documents/MSDS/fashion-mnist/data/fashion/train-labels-idx1-ubyte"))
+test_y  = as.factor(load_label_file("/home/bonzilla/Documents/MSDS/fashion-mnist/data/fashion/t10k-labels-idx1-ubyte"))
 ```
 
 
@@ -126,9 +126,37 @@ for (i in 1:16) {
 ## PCA
 
 ```{r}
-
+# use the prcomp function
+train.pca <- prcomp( train, center = TRUE, scale = TRUE )
+# print the pca summary
+sumTrain <- summary( train.pca )
 ```
 
+```{r}
+#calculate total variance explained by each principal component
+# train.pca$var_explained <- train.pca$sdev^2 / sum(train.pca$sdev^2)
+# train.pca$cumvarexp <- cumsum( var_explained )
+# train.pca$compnum <- 1:dim(train)[2]
+df <- data.frame( t( sumTrain$importance ) )
+df$compnum <- 1:dim(train)[2]
+head( df )
+```
+
+
+Visualizing the cumulative explained variance described by the principal components with a Skree Plot:
+```{r}
+ggplot( df, aes( x = compnum, y = Cumulative.Proportion ) ) +
+  geom_line() +
+  ylim( c(0,1.1) ) +
+  #scale_x_continuous(breaks = seq(0, length( explained_variance ), by = 1)) +
+  geom_hline( yintercept = 0.95, linetype = 'dotted', col = 'red') +
+  annotate("text", x = 2, y = 0.98, 
+           label = expression( "95%" ~ sigma), vjust = -0.5) +
+  theme_minimal() +
+  xlab( 'Principal Component Number' ) +
+  ylab( 'Cummulative Explained Variance' ) +
+  ggtitle( 'Scree Plot: Explained Variance of Principal Components' )
+```
 
 
 ## References
