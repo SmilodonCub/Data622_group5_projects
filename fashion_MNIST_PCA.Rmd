@@ -1,7 +1,7 @@
 ---
-title: "Mental Health Survey"
-subtitle: "Homework 4 Data 622 Section 2 Group 5"
-author: "Bonnie Cooper, Leo Yi"
+title: "Fashion MNIST PCA"
+subtitle: "Group Final Project"
+author: "David Blumenstiel, Bonnie Cooper, Robert Welk, Leo Yi"
 date: "`r Sys.Date()`"
 output:
   html_document:
@@ -12,7 +12,7 @@ output:
     theme: paper
     highlight: tango
     font-family: Consolas
-    code_folding: hide
+    #code_folding: hide
   pdf_document:
     toc: yes
 ---
@@ -45,28 +45,28 @@ options(scipen = 9)
 ```
 <br>
 
-## Introduction
+## About this section for the final project
 
-* PCA on fashion MNIST to reduce dimensionality
-* hierarchical clustering?
+* PCA on fashion MNIST for dimensionality reduction
+* SVM or something with Trees Classification before/after PCA
 
 About Fashion MNIST:  
 * 70,000 grayscale images
 * 10 distinct image categories
 * each image is 28x28 pixels (785 features)
 
-### Import Data
+### Importing the Data
 
-To begin, the following code will import the data and load the libraries:
-
+libraries used:
 ```{r import}
 library(keras)
 library(tidyr)
 library(dplyr)
 library(ggplot2)
+library(gridExtra)
 ```
 
-
+helper functions for visualizing images
 ```{r}
 show_digit = function(arr784, col = gray(12:1 / 12), ...) {
   image(matrix(as.matrix(arr784[-785]), nrow = 28)[, 28:1], col = col, labels=FALSE, xaxt = "n", yaxt = "n", ...)
@@ -96,7 +96,7 @@ load_label_file = function(filename) {
 }
 ```
 
-
+loading the data
 ```{r}
 # load images
 train = load_image_file("/home/bonzilla/Documents/MSDS/fashion-mnist/data/fashion/train-images-idx3-ubyte")
@@ -108,18 +108,53 @@ test_y  = as.factor(load_label_file("/home/bonzilla/Documents/MSDS/fashion-mnist
 ```
 
 
-```{r}
+### Exploratory Visualizations
+
+Visualize a single fashion MNIST image:
+```{r fig1, fig.height = 4, fig.width = 4, fig.align = "center"}
 # view test image
 show_digit(train[20000, ])
+title('Example Image')
 ```
 
-```{r}
+Visualiza a sampling of Fashion MNIST images: 
+```{r fig2, fig.height = 10, fig.width = 10, fig.align = "center"}
 # We plot 16 cherry-picked images from the training set
-par(mfrow=c(4, 4), mar=c(0, 0.2, 1, 0.2))
-for (i in 1:16) {
-  nr <- i * 10
+num = 10
+par(mfrow=c(num, num), mar=c(0, 0.2, 1, 0.2))
+for (i in 1:(num*num)) {
   show_digit(train[i, ])
 }
+```
+
+
+Visualize each pixel's mean value and standard deviation across all Fashion MNIST images in the training dataset. Additionally visualize which pixels
+```{r fig3, fig.height = 4, fig.width = 8, fig.align = "center"}
+par(mfrow = c(1,2))
+
+numcols = dim(train)[2]
+train.ave = data.frame(pixel = apply(train, 2, mean))
+show_digit( train.ave )
+title( 'Pixel Mean Value' )
+
+train.sd = data.frame(pixel = apply(train, 2, sd))
+show_digit( train.sd )
+title( 'Pixel Standard Deviation' )
+
+par(mfrow = c(1,1))
+```
+
+The figure above left visualizes the mean pixel values across the `train` dataset. The figure to the right shows the standard deviations for each pixel. For both plots, higher intensity values are rendered as dark whereas low values are light. For many of the pixels in the image, the mean values is intermediate (gray) whereas the standard deviation is relatively high (dark). These pixels make up most of the variance in the dataset. However, we can see that there are two regions of pixels towards the image center where the mean pixel value is high (dark) while the pixel standard deviation is low (light). For these regions, the pixels have consistently high pixel values.  Towards the periphery of the image there are pixels with both low mean values (light) and low standard deviation (light). These pixels have consistently low values.  
+
+The pixels with either consistently low or high values are of low information content and do not contribute much to models for image classification. These low information pixels add redundant features to the dataset. We can use PCA as a tool to reduce the dimensionality of the data such that we represent a maximum of data variance with fewer features. Such a manipulation is favorable because it will reduce the data complexity and time necessary to train models.  
+
+The following figure highlights which pixels have a mean value less than 5% of the data range:
+```{r fig4, fig.height = 4, fig.width = 4, fig.align = "center"}
+train.avescale <- train.ave %>%
+  mutate( pixscale = pixel/255,
+          lowval = pixscale < 0.05 )
+
+show_digit(train.avescale$lowval)
 ```
 
 
@@ -145,17 +180,35 @@ head( df )
 
 Visualizing the cumulative explained variance described by the principal components with a Skree Plot:
 ```{r}
-ggplot( df, aes( x = compnum, y = Cumulative.Proportion ) ) +
+p1 <- ggplot( df, aes( x = compnum, y = Proportion.of.Variance ) ) +
+  geom_line() +
+  ylim( c(0,0.3) ) +
+  xlim( c(0,20)) +
+  geom_hline( yintercept = 0.01, linetype = 'dotted', col = 'red') +
+  annotate("text", x = 2, y = 0.01, 
+           label = expression( "1%" ~ sigma), vjust = -0.5) +
+  theme_minimal() +
+  xlab( 'Principal Component Number' ) +
+  ylab( 'Proportion Explained Variance' ) +
+  ggtitle( 'Skree plot' )
+
+p2 <- ggplot( df, aes( x = compnum, y = Cumulative.Proportion ) ) +
   geom_line() +
   ylim( c(0,1.1) ) +
+  xlim( c(0,400)) +
   geom_hline( yintercept = 0.95, linetype = 'dotted', col = 'red') +
   annotate("text", x = 2, y = 0.98, 
            label = expression( "95%" ~ sigma), vjust = -0.5) +
   theme_minimal() +
   xlab( 'Principal Component Number' ) +
   ylab( 'Cummulative Explained Variance' ) +
-  ggtitle( 'Scree Plot: Explained Variance of Principal Components' )
+  ggtitle( 'Cumulative Explained Variance' )
+
+grid.arrange( p1, p2, ncol=2)
 ```
+
+From the skree plot, we can see a very sharp drop off in the proportion of explained variance. Principal Components greater than 13 account for less than 1% of the dataset's variance. However, the first 12 components only account for a cumulative variance of `r round( df$Cumulative.Proportion[12], 2)`
+
 
 How many components account for 95% of the variance in the data?
 ```{r}
