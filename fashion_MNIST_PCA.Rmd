@@ -59,7 +59,7 @@ About Fashion MNIST:
 
 libraries used:
 ```{r import}
-library(keras)
+library(caret)
 library(tidyr)
 library(dplyr)
 library(ggplot2)
@@ -324,6 +324,67 @@ for (i in 1:(npics*mpics)) {
 ```
 
 Truncating the data to `r comp95` components does result in information loss, however, as we can see from the visualizations above, the images retain much of the detail from the original images while using a feature space `r round(comp95/784*100,2)`% the size of the original.
+
+## PCA Performance Comparison
+
+We used PCA to reduce the dimensionality of the Fashion MNIST `train` dataset. Here we will evaluate the speed and performance of an SVM model fit to either the original 784 feature image set or the PCA compressed `r comp95` dataset. The compressed dataset will undoubtedly train faster, but at what cost to prediction accuracy?
+
+### Train, Time & Evaluate SVM fit on original images
+
+The following code was used to fit a Support Vector Machine classifier to a subset (10000 images) of the original data. To facilitate the process, the model has been previously fit, saved and will be loaded for further analysis
+```{r eval=FALSE}
+# use a subset of train to expedite SVM
+sub_train <- train[1:10000,] %>%
+  mutate(labels = train_y[1:10000] )
+
+start_time <- Sys.time()
+svm_mdl <- train(labels~.,data=sub_train,
+                 method="svmRadial",
+                 trControl=trainControl(method="cv", number=3),
+                 tuneGrid=data.frame(sigma = 0.01, C = 3.5),
+                 verbose=TRUE)
+end_time <- Sys.time()
+
+print(svm_mdl)
+run_time <- start_time - end_time
+paste( 'run time: ', run_time )
+```
+
+runtime using the original feature space was found to be: 11:10  
+Here we load the previously saved model
+```{r}
+svm_mdl_full <- load("svm_mdl_full")
+print( get(svm_mdl_full) )
+```
+
+### Train, Time & Evaluate SVM fit on compressed images
+
+The following code was used to fit a Support Vector Machine classifier to a subset (10000 images) of the PCA compressed data features. Again, to facilitate the process, the model has been previously fit, saved and will be loaded for further analysis
+
+```{r eval=FALSE}
+# use a subset of train to expedite SVM
+sub_train_trunc <- data.frame( trunc[1:10000,] ) %>%
+  mutate(labels = train_y[1:10000] )
+
+start_time2 <- Sys.time()
+svm_mdl <- train(labels~.,data=sub_train_trunc,
+                 method="svmRadial",
+                 trControl=trainControl(method="cv", number=3),
+                 tuneGrid=data.frame(sigma = 0.01, C = 3.5),
+                 verbose=TRUE)
+end_time2 <- Sys.time()
+
+print(svm_mdl)
+run_time2 <- start_time2 - end_time2
+paste( 'run time: ', run_time2 )
+```
+
+
+runtime using the original feature space was found to be: 9:54
+```{r}
+svm_mdl_trunc <- load("svm_mdl_trunc")
+print( get(svm_mdl_trunc) )
+```
 
 
 <br><br><br>
