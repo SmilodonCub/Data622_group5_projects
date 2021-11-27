@@ -387,4 +387,45 @@ print( get(svm_mdl_trunc) )
 ```
 
 
+### Evaluate SVM performance on `test` data
+
+We can now evaluate the performance of the models trained on the full feature space and the PCA-compressed feature space on the `test` data. First, we need to preprocess the `test` data for PCA in the same way that the `train` data was processed. 
+```{r}
+test.pca <- prcomp( test )
+test_trunc <- test.pca$x[,1:comp95] %*% t(test.pca$rotation[,1:comp95])
+#and add the center (and re-scale) back to data
+if(test.pca$scale != FALSE){
+	test_trunc <- scale(test_trunc, center = FALSE , scale=1/test.pca$scale)
+}
+if(test.pca$center != FALSE){
+  test_trunc <- scale(test_trunc, center = -1 * test.pca$center, scale=FALSE)
+}
+```
+
+```{r}
+pred <- predict( get(svm_mdl_full) , test)
+#test$prediction <- pred
+pred_trunc <- predict( get(svm_mdl_trunc), test_trunc)
+#test_trunc$prediction <- pred_trunc
+```
+
+Confusion Matrix for SVM Classification with the full feature space
+```{r}
+tbl_full <- table(Label = test_y[1:10000], Prediction = pred)
+print(tbl_full)
+cat("The model is ", 100 * sum(diag(tbl_full)) / nrow(test), "% accurate.", sep = "")
+```
+Confusion Matrix for SVM Classification with the PCA compressed feature space
+```{r}
+tbl_trunc <- table(Label = test_y[1:10000], Prediction = pred_trunc)
+print(tbl_trunc)
+cat("The model is ", 100 * sum(diag(tbl_trunc)) / nrow(test), "% accurate.", sep = "")
+```
+
+## Summary
+
+PCA is a dimensionality reduction method that can be applied to high dimensional datasets. PCA reduces the number of features while preserving as much variance from the data as possible. Here we used PCA to reduce the number of features of the Fashion MNIST dataset from 784 to `r comp95`. We showed through a series of visualizations that transforming the images to the reduced feature space does so with an noticeable loss to image quality, however the gist of the images is still present. Furthermore, we used SVM model fits to evaluate performance with the reduced dimension PCA version of Fashion MNIST. A radial SVM classifier was trained on a subset of 10,000 images for both the full-featured set and the PCA-compressed set. The PCA-compressed model trained approximately 1 minute and 20seconds faster than the full-featured data. En face, this does difference does not sound appreciable. However, considering that training time for SVM scales quadratically with dataset size, one would expect to see noticeable improvements in performance had the entire `train` set been used for model training. Furthermore, we evaluated the classification accuracy and found that the PCA-compressed SVM model had a higher prediction accuracy on the test data. In conclusion, use of the PCA compressed dataset would be beneficial in down-stream modeling analysis. As a detraction, additional steps would be necessary to transform the data between full and compressed feature spaces to facilitate model interpretation.
+
+
+
 <br><br><br>
