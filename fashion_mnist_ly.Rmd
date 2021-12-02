@@ -1,0 +1,264 @@
+---
+title: "fashion_mnist_ly"
+author: "leo"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: yes
+    toc_depth: 4
+    toc_float: yes
+    number_sections: no
+    theme: paper
+    highlight: tango
+    font-family: Consolas
+    #code_folding: hide
+  pdf_document:
+    toc: yes
+---
+
+```{=html}
+<style type="text/css">
+
+code {
+  font-family: "Consolas";
+  font-size: 11px;
+}
+
+pre {
+  font-family: "Consolas";
+  font-size: 11px;
+}
+
+mark {
+  background-color: whitesmoke;
+  color: black;
+}
+
+</style>
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = T, warning = F, message = F, fig.width = 10)
+
+options(scipen = 9)
+```
+
+## Libraries
+
+```{r lib}
+
+library(stringr)
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(gridExtra)
+library(caret)
+library(conflicted)
+library(factoextra)
+
+conflict_scout()
+conflict_prefer('filter', 'dplyr')
+
+```
+
+## Import
+
+```{r import}
+
+# CSV FILES DOWNLOADED FROM 
+# https://www.kaggle.com/zalando-research/fashionmnist
+
+file_path <- 'C:/downloads/docs/data622/final/'
+
+train_fn <- 'fashion-mnist_train.csv'
+test_fn <- 'fashion-mnist_test.csv'
+
+train_path <- str_c(file_path, train_fn)
+test_path <- str_c(file_path, test_fn)
+
+train <- read.csv(train_path)
+test <- read.csv(test_path)
+
+train$label <- factor(train$label, labels = c('T-shirt/top',
+                                              'Trouser',
+                                              'Pullover',
+                                              'Dress',
+                                              'Coat', 
+                                              'Sandal',
+                                              'Shirt',
+                                              'Sneaker',
+                                              'Bag',
+                                              'Ankle boot'))
+
+test$label <- factor(test$label, labels = c('T-shirt/top',
+                                            'Trouser',
+                                            'Pullover',
+                                            'Dress',
+                                            'Coat', 
+                                            'Sandal',
+                                            'Shirt',
+                                            'Sneaker',
+                                            'Bag',
+                                            'Ankle boot'))
+
+```
+
+## Functions
+
+```{r functions}
+
+# convert number to 6 digit string
+num_to_str_5 <- function(num) {
+  
+  str <- as.character(num)
+  
+  str <- paste0('0000', str)
+  
+  str <- str_sub(str, -5, -1)
+  
+  return(str)
+}
+
+
+# convert dataframe to grid with x and y coordinates
+as_grid_vars <- function(data, row_names = NA) {
+  
+  # dataframe in parameter
+  df <- data
+  
+  # store label
+  label <- df$label
+  
+  # remove label
+  df <- df %>%
+    select(-label)
+  
+  # change field names to seq 1 to 784
+  colnames(df) <- seq_len(28*28)
+  
+  # add back label
+  df$label <- label
+  
+  # add row index/name
+  if (is.na(row_names)) {
+    
+    df$row <- seq_len(nrow(df)) %>%
+      num_to_str_5()
+    
+  } else {
+    
+    df$row <- row_names %>%
+      num_to_str_5()
+    
+  }
+  
+  # gather fields into rows
+  df2 <- gather(df, var, val, -row, -label)
+  
+  # convert col name variable into integer
+  df2$var <- as.integer(df2$var)
+  
+  # calculate grid
+  df2$y <- ceiling(df2$var / 28)
+  df2$x <- df2$var - 28 * (df2$y - 1)
+  
+  # reverse y
+  df2$y <- 28 - df2$y + 1
+
+  # sort
+  df2 <- df2 %>%
+    arrange(row, x, y) %>%
+    select(label, row, pixel = var, val, x, y)
+  
+  return(df2)
+    
+}
+
+
+# plot based on row index
+plot_row <- function(row, data = train) {
+  
+  # select row from dataframe
+  df <- data[row, ]
+  
+  # convert to grid format dataframe
+  df2 <- as_grid_vars(df, row)
+  
+  df2$id <- paste0(df2$row, ': ', df2$label)
+  
+  # plot
+  p <- ggplot(df2, aes(x = x, y = y, fill = val)) +
+    geom_tile() +
+    scale_fill_gradient(low = "white", high = "black", na.value = NA) +
+    theme_bw() +
+    theme(aspect.ratio = 1,
+          legend.position = 'none') +
+    scale_x_continuous(breaks = seq(0,28,4)) +
+    scale_y_continuous(breaks = seq(0,28,4)) +
+    labs(x = element_blank(),
+         y = element_blank()) +
+    facet_wrap(~id)
+  
+  return(p)
+}
+
+```
+
+## EDA
+
+```{r eda, fig.height = 8}
+# use a smaller training set, 10% or 6k rows
+tenth <- createDataPartition(train$label, p = 0.1, list = F)
+
+train2 <- train[tenth,]
+
+# convert to grid format
+train2_grid <- as_grid_vars(train2)
+
+head(train2_grid)
+
+# see which pixels are used the most
+train2_grid %>%
+  group_by(x, y) %>%
+  summarize(not_white = sum(ifelse(val > 0, 1, 0))) %>%
+  ggplot(aes(x = x, y = y, fill = not_white)) +
+  geom_tile() +
+  theme(aspect.ratio = 1)
+
+# see which pixels are used the most by label
+train2_grid %>%
+  group_by(x, y, label) %>%
+  summarize(not_white = sum(ifelse(val > 0, 1, 0))) %>%
+  ggplot(aes(x = x, y = y, fill = not_white)) +
+  geom_tile() +
+  scale_x_continuous(breaks = seq(0,28,4)) +
+  scale_y_continuous(breaks = seq(0,28,4)) +
+  theme(aspect.ratio = 1) +
+  facet_wrap(~label)
+
+# plot random 4x4
+plot_row(seq(101,116,1))
+
+# plot another random 4x4
+plot_row(seq(201,216,1))
+```
+
+## Thoughts on Feature Engineering
+
+- % of white in the left and right columns
+- % of white in the top and bottom rows
+- % of pixels that are white
+- % of pixels that are different shades of grey -- 0, 50, 87, 167, 209, 255
+- blocks with central points and change in relative colors
+- blocks with central points to determine if any color exists -- determine shape
+- alternatively, reference point for sub-grid instead of central point
+  - example:
+    - point 14,14, 10x10 block
+    - lower left reference point: rp_14_14_x0_y0 to rp_14_14_x10_x10
+    - central reference point: crp_14_14_x-5_y-5 to crp_14_14_x5_y5
+    - each reference point variable would be the difference from the reference point
+- vertical or horizontal strips evaluated -- continuous color at top of strip
+- trouser center-mid strip to check for white space between legs
+
+
+
