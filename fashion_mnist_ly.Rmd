@@ -39,14 +39,12 @@ mark {
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = T, warning = F, message = F, fig.width = 10)
-
 options(scipen = 9)
 ```
 
 ## Libraries
 
 ```{r lib}
-
 library(stringr)
 library(dplyr)
 library(ggplot2)
@@ -55,16 +53,15 @@ library(gridExtra)
 library(caret)
 library(conflicted)
 library(factoextra)
+library(purrr)
 
 conflict_scout()
 conflict_prefer('filter', 'dplyr')
-
 ```
 
 ## Import
 
 ```{r import}
-
 # CSV FILES DOWNLOADED FROM 
 # https://www.kaggle.com/zalando-research/fashionmnist
 
@@ -100,7 +97,6 @@ test$label <- factor(test$label, labels = c('T-shirt/top',
                                             'Sneaker',
                                             'Bag',
                                             'Ankle boot'))
-
 ```
 
 ## Functions
@@ -111,9 +107,7 @@ test$label <- factor(test$label, labels = c('T-shirt/top',
 num_to_str_5 <- function(num) {
   
   str <- as.character(num)
-  
   str <- paste0('0000', str)
-  
   str <- str_sub(str, -5, -1)
   
   return(str)
@@ -163,7 +157,7 @@ as_grid_vars <- function(data, row_names = NA) {
   df2$x <- df2$var - 28 * (df2$y - 1)
   
   # reverse y
-  df2$y <- 28 - df2$y + 1
+  df2$y <- 29 - df2$y
 
   # sort
   df2 <- df2 %>%
@@ -202,14 +196,42 @@ plot_row <- function(row, data = train) {
   return(p)
 }
 
+
+# create vector of pixels applying to a specific column or x value
+col_index_list <- function(x) {
+  
+  cols <- c()
+  
+  for (i in 0:27) {
+    
+    xx <- x + (i * 28)
+    cols <- append(cols, xx)
+  
+  }
+  
+  return(cols)
+  
+}
+
+# create vector of pixels applying to a specific row or y value
+row_index_list <- function(y) {
+  
+  y_start <- (28 - y) * 28 + 1
+  y_end <- y_start + 27
+  rows <- seq(y_start, y_end) 
+  
+  return(rows)
+  
+}
+
 ```
 
 ## EDA
 
 ```{r eda, fig.height = 8}
 # use a smaller training set, 10% or 6k rows
+set.seed(101)
 tenth <- createDataPartition(train$label, p = 0.1, list = F)
-
 train2 <- train[tenth,]
 
 # convert to grid format
@@ -220,7 +242,8 @@ head(train2_grid)
 # see which pixels are used the most
 train2_grid %>%
   group_by(x, y) %>%
-  summarize(not_white = sum(ifelse(val > 0, 1, 0))) %>%
+  summarize(not_white = sum(ifelse(val > 0, 1, 0)),
+            .groups = 'drop') %>%
   ggplot(aes(x = x, y = y, fill = not_white)) +
   geom_tile() +
   theme(aspect.ratio = 1)
@@ -228,7 +251,8 @@ train2_grid %>%
 # see which pixels are used the most by label
 train2_grid %>%
   group_by(x, y, label) %>%
-  summarize(not_white = sum(ifelse(val > 0, 1, 0))) %>%
+  summarize(not_white = sum(ifelse(val > 0, 1, 0)),
+            .groups = 'drop') %>%
   ggplot(aes(x = x, y = y, fill = not_white)) +
   geom_tile() +
   scale_x_continuous(breaks = seq(0,28,4)) +
@@ -243,22 +267,475 @@ plot_row(seq(101,116,1))
 plot_row(seq(201,216,1))
 ```
 
-## Thoughts on Feature Engineering
+## Feature Engineering
 
-- % of white in the left and right columns
-- % of white in the top and bottom rows
-- % of pixels that are white
+One of the methods that can be used for dimensionality reduction is feature engineering. Instead of processing $28^2$ or 784 individual variables, we will use feature engineering to process the data into fewer variables that attempt to summarize information within the original dataset. If resources were unlimited, we could use both the original pixel variables along with the features below. Since we're using consumer grade personal computers, we'll train the models in the next step using the calculated features in this section. Below is a list of the calculated variables:
+
 - % of pixels that are different shades of grey -- 0, 50, 87, 167, 209, 255
-- blocks with central points and change in relative colors
-- blocks with central points to determine if any color exists -- determine shape
-- alternatively, reference point for sub-grid instead of central point
-  - example:
-    - point 14,14, 10x10 block
-    - lower left reference point: rp_14_14_x0_y0 to rp_14_14_x10_x10
-    - central reference point: crp_14_14_x-5_y-5 to crp_14_14_x5_y5
-    - each reference point variable would be the difference from the reference point
-- vertical or horizontal strips evaluated -- continuous color at top of strip
-- trouser center-mid strip to check for white space between legs
+  - white: 0
+  - grey1: 1-46
+  - grey2: 47-93 
+  - grey3: 94-168
+  - grey4: 169-205    
+  - black: 206-255
+- % of non-white pixels in each of the 28 rows
+- % of non-white pixels in each of the 28 columns
+- % of rows that are completely white
+- % of columns that are completely white
+- 20 custom blocks that are subsections of the grids, showing percent non-white as well as percent light grey (1 - 122).
 
+The features listed were determined by visually analyzing the faceted chart in the EDA section that showed the most used pixels for each of the types of fashion item. 
+
+```{r feature_engineering}
+
+# # get the pixels for each coordinate
+# grid_ref <- train2_grid %>%
+#   filter(row == '00001') %>%
+#   select(x, y, pixel)
+# 
+# # list the pixels for column 1 or x = 1
+# col1_check <- grid_ref %>%
+#   filter(x == 1) %>%
+#   arrange(pixel)
+# 
+# # list the pixels for row 1 or y = 1
+# row1_check <- grid_ref %>%
+#   filter(y == 1) %>%
+#   arrange(pixel)
+
+# return pixel based on coordinates
+find_pixel <- function(x, y) {
+  
+  pixel <- (28 - y) * 28 + x
+  
+}
+
+# list pixels within box using lower left and top right coordinates
+box_pixel_list <- function(xstart, ystart, xend, yend) {
+  
+  # initialize empty vector
+  pixels <- c()
+  
+  # loop through entire range
+  for (y in ystart:yend) {
+    for (x in xstart:xend) {
+      pixels <- append(pixels, find_pixel(x, y))
+    }
+  }
+  
+  return(pixels)
+  
+}
+
+# ptest <- box_pixel_list(16,6,22,10)
+
+
+
+
+# # for function building purposes only
+# data <- train[1:10,]
+# grid_check <- as_grid_vars(data)
+
+# convert a dataframe into a new dataframe with feature variables only
+calculate_features <- function(data) {
+
+  # initialize dataframe
+  df <- data
+  
+  # remove label if it exists in first column
+  if (is.factor(data[,1])) {
+    labels <- df$label
+    df <- df %>%
+      select(-label)
+  }
+  
+  # count columns = 28 * 28 = 784
+  col_count <- ncol(df)
+  
+  
+  ### pct different shades of grey
+  temp_df <- df
+  
+  # percent white 
+  x <- df == 0
+  x[x == T] <- 1
+  temp_df$pct_white <- rowSums(x) / 784
+  
+  # percent grey1
+  x <- df > 0 & df <= 46
+  x[x == T] <- 1
+  temp_df$pct_grey1 <- rowSums(x) / 784
+  
+  # percent grey2
+  x <- df > 46 & df <= 93
+  x[x == T] <- 1
+  temp_df$pct_grey2 <- rowSums(x) / 784
+  
+  # percent grey3
+  x <- df > 93 & df <= 168
+  x[x == T] <- 1
+  temp_df$pct_grey3 <- rowSums(x) / 784
+  
+  # percent grey4
+  x <- df > 168 & df <= 205 
+  x[x == T] <- 1
+  temp_df$pct_grey4 <- rowSums(x) / 784
+  
+  # percent black
+  x <- df > 205 
+  x[x == T] <- 1
+  temp_df$pct_black <- rowSums(x) / 784
+  
+  # keep shades only
+  y_start <- col_count + 1
+  y_end <- ncol(temp_df)
+  shades <- temp_df[,y_start:y_end]
+  
+  rm(temp_df)
+  
+  ### calculate non-white pixels for row and column strips
+  
+  # convert non zeros to 1
+  bkup_df <- df
+  df[df > 0] <- 1
+  
+  # calculate column strips as % non-white
+  df$pw_x1 <- df[,row_index_list(1)] %>% rowSums() / 28
+  df$pw_x2 <- df[,row_index_list(2)] %>% rowSums() / 28
+  df$pw_x3 <- df[,row_index_list(3)] %>% rowSums() / 28
+  df$pw_x4 <- df[,row_index_list(4)] %>% rowSums() / 28
+  df$pw_x5 <- df[,row_index_list(5)] %>% rowSums() / 28
+  df$pw_x6 <- df[,row_index_list(6)] %>% rowSums() / 28
+  df$pw_x7 <- df[,row_index_list(7)] %>% rowSums() / 28
+  df$pw_x8 <- df[,row_index_list(8)] %>% rowSums() / 28
+  df$pw_x9 <- df[,row_index_list(9)] %>% rowSums() / 28
+  df$pw_x10 <- df[,row_index_list(10)] %>% rowSums() / 28
+  df$pw_x11 <- df[,row_index_list(11)] %>% rowSums() / 28
+  df$pw_x12 <- df[,row_index_list(12)] %>% rowSums() / 28
+  df$pw_x13 <- df[,row_index_list(13)] %>% rowSums() / 28
+  df$pw_x14 <- df[,row_index_list(14)] %>% rowSums() / 28
+  df$pw_x15 <- df[,row_index_list(15)] %>% rowSums() / 28
+  df$pw_x16 <- df[,row_index_list(16)] %>% rowSums() / 28
+  df$pw_x17 <- df[,row_index_list(17)] %>% rowSums() / 28
+  df$pw_x18 <- df[,row_index_list(18)] %>% rowSums() / 28
+  df$pw_x19 <- df[,row_index_list(19)] %>% rowSums() / 28
+  df$pw_x20 <- df[,row_index_list(20)] %>% rowSums() / 28
+  df$pw_x21 <- df[,row_index_list(21)] %>% rowSums() / 28
+  df$pw_x22 <- df[,row_index_list(22)] %>% rowSums() / 28
+  df$pw_x23 <- df[,row_index_list(23)] %>% rowSums() / 28
+  df$pw_x24 <- df[,row_index_list(24)] %>% rowSums() / 28
+  df$pw_x25 <- df[,row_index_list(25)] %>% rowSums() / 28
+  df$pw_x26 <- df[,row_index_list(26)] %>% rowSums() / 28
+  df$pw_x27 <- df[,row_index_list(27)] %>% rowSums() / 28
+  df$pw_x28 <- df[,row_index_list(28)] %>% rowSums() / 28
+  
+  # calculate row strips as % non-white
+  df$pw_y1 <- df[,col_index_list(1)] %>% rowSums() / 28
+  df$pw_y2 <- df[,col_index_list(2)] %>% rowSums() / 28
+  df$pw_y3 <- df[,col_index_list(3)] %>% rowSums() / 28
+  df$pw_y4 <- df[,col_index_list(4)] %>% rowSums() / 28
+  df$pw_y5 <- df[,col_index_list(5)] %>% rowSums() / 28
+  df$pw_y6 <- df[,col_index_list(6)] %>% rowSums() / 28
+  df$pw_y7 <- df[,col_index_list(7)] %>% rowSums() / 28
+  df$pw_y8 <- df[,col_index_list(8)] %>% rowSums() / 28
+  df$pw_y9 <- df[,col_index_list(9)] %>% rowSums() / 28
+  df$pw_y10 <- df[,col_index_list(10)] %>% rowSums() / 28
+  df$pw_y11 <- df[,col_index_list(11)] %>% rowSums() / 28
+  df$pw_y12 <- df[,col_index_list(12)] %>% rowSums() / 28
+  df$pw_y13 <- df[,col_index_list(13)] %>% rowSums() / 28
+  df$pw_y14 <- df[,col_index_list(14)] %>% rowSums() / 28
+  df$pw_y15 <- df[,col_index_list(15)] %>% rowSums() / 28
+  df$pw_y16 <- df[,col_index_list(16)] %>% rowSums() / 28
+  df$pw_y17 <- df[,col_index_list(17)] %>% rowSums() / 28
+  df$pw_y18 <- df[,col_index_list(18)] %>% rowSums() / 28
+  df$pw_y19 <- df[,col_index_list(19)] %>% rowSums() / 28
+  df$pw_y20 <- df[,col_index_list(20)] %>% rowSums() / 28
+  df$pw_y21 <- df[,col_index_list(21)] %>% rowSums() / 28
+  df$pw_y22 <- df[,col_index_list(22)] %>% rowSums() / 28
+  df$pw_y23 <- df[,col_index_list(23)] %>% rowSums() / 28
+  df$pw_y24 <- df[,col_index_list(24)] %>% rowSums() / 28
+  df$pw_y25 <- df[,col_index_list(25)] %>% rowSums() / 28
+  df$pw_y26 <- df[,col_index_list(26)] %>% rowSums() / 28
+  df$pw_y27 <- df[,col_index_list(27)] %>% rowSums() / 28
+  df$pw_y28 <- df[,col_index_list(28)] %>% rowSums() / 28
+
+  ### calculate pct of non-white pixels in select grids
+  ### also pct of lightly shaded colors in box
+  temp_df <- bkup_df > 0 & bkup_df <= 122
+  temp_df[temp_df == T] <- 1
+  
+  # custom grid 1, collar area, 12,26 : 18,28
+  pixel_list <- box_pixel_list(12, 26, 18, 28)
+  pixel_area <- length(pixel_list)
+  df$pw_collar <- df[,pixel_list] %>% rowSums() / pixel_area
+  df$plg_collar <- temp_df[,pixel_list] %>% rowSums() / pixel_area
+  
+  # custom grid 2, tshirt sleeve area
+  pixel_list <- box_pixel_list(2, 14, 12, 20)
+  pixel_area <- length(pixel_list)
+  df$pw_ts_sleeve <- df[,pixel_list] %>% rowSums() / pixel_area
+  df$plg_ts_sleeve <- temp_df[,pixel_list] %>% rowSums() / pixel_area
+  
+  # custom grid 3, trouser legs
+  pixel_list <- box_pixel_list(12, 4, 18, 20)
+  pixel_area <- length(pixel_list)
+  df$pw_trouser_legs <- df[,pixel_list] %>% rowSums() / pixel_area
+  df$plg_trouser_legs <- temp_df[,pixel_list] %>% rowSums() / pixel_area
+  
+  # custom grid 4, shoulder area
+  pixel_list <- box_pixel_list(2, 23, 10, 28)
+  pixel_area <- length(pixel_list)
+  df$pw_shoulder <- df[,pixel_list] %>% rowSums() / pixel_area
+  df$plg_shoulder <- temp_df[,pixel_list] %>% rowSums() / pixel_area
+  
+  # custom grid 5, sneaker top
+  pixel_list <- box_pixel_list(19, 17, 27, 25)
+  pixel_area <- length(pixel_list)
+  df$pw_sneaker_top <- df[,pixel_list] %>% rowSums() / pixel_area
+  df$plg_sneaker_top <- temp_df[,pixel_list] %>% rowSums() / pixel_area
+  
+  # custom grid 6, center box
+  pixel_list <- box_pixel_list(7, 7, 21, 21)
+  pixel_area <- length(pixel_list)
+  df$pw_center <- df[,pixel_list] %>% rowSums() / pixel_area
+  df$plg_center <- temp_df[,pixel_list] %>% rowSums() / pixel_area
+  
+  # custom grid 7, bag_handle
+  pixel_list <- box_pixel_list(10, 16, 20, 24)
+  pixel_area <- length(pixel_list)
+  df$pw_bag_handle <- df[,pixel_list] %>% rowSums() / pixel_area
+  df$plg_bag_handle <- temp_df[,pixel_list] %>% rowSums() / pixel_area
+  
+  # custom grid 8, footwear area
+  pixel_list <- box_pixel_list(1, 6, 28, 22)
+  pixel_area <- length(pixel_list)
+  df$pw_footwear <- df[,pixel_list] %>% rowSums() / pixel_area
+  df$plg_footwear <- temp_df[,pixel_list] %>% rowSums() / pixel_area
+  
+  # custom grid 9, sleeve
+  pixel_list <- box_pixel_list(4, 1, 10, 16)
+  pixel_area <- length(pixel_list)
+  df$pw_sleeve <- df[,pixel_list] %>% rowSums() / pixel_area
+  df$plg_sleeve <- temp_df[,pixel_list] %>% rowSums() / pixel_area
+  
+  # custom grid 10, heel
+  pixel_list <- box_pixel_list(16, 4, 24, 10)
+  pixel_area <- length(pixel_list)
+  df$pw_heel <- df[,pixel_list] %>% rowSums() / pixel_area
+  df$plg_heel <- temp_df[,pixel_list] %>% rowSums() / pixel_area
+  
+  ### exclude single pixel variables
+  
+  ystart <- col_count + 1
+  yend <- ncol(df)
+  
+  strips <- df[,ystart:yend]
+  rm(df, temp_df, bkup_df)
+  
+  ### calculate percent of non-white strips for rows and columsn
+  
+  # pct of non-white rows
+  temp_df <- strips[,1:28]
+  x <- temp_df == 1
+  x[x == T] <- 1
+  strips$pw_rows <- rowSums(x) / 28
+  
+  # pct of non-white cols
+  temp_df <- strips[,29:56]
+  x <- temp_df == 1
+  x[x == T] <- 1
+  strips$pw_cols <- rowSums(x) / 28
+  
+  rm(temp_df)
+  
+  ### combine all new variables
+  final <- bind_cols(shades, strips)
+  
+  # add back labels if exists
+  if (is.factor(data[,1])) {
+    final <- bind_cols(label = labels, final)
+  } 
+  
+  rm(shades, strips)
+  gc()
+  return(final)
+    
+}
+```
+
+
+## Supervised Models
+
+This section uses 10 fold cross validation to train the following models:
+
+- Random forest
+- Support vector machine using a radial kernel
+- Knn nearest neighbor
+- Multinomial logistic regression
+- Naive bayes
+
+The following models will be trained exclusively on the variables created in the earlier feature engineering section. Additionally, the training data will only use a fraction of the original training dataset in order to deal with the hardware limitations of personal computers. The training set used below is a stratified sample and accounts for 16.7% or 10,010 observations of the original training set.
+
+
+```{r training models}
+# create new dataframes using only feature engineering variables
+# train3 <- calculate_features(train2)
+test2 <- calculate_features(test)
+
+# use a new training set, about 10k rows
+set.seed(101)
+trainIndex <- createDataPartition(train$label, p = 0.167, list = F)
+train3 <- train[trainIndex,] %>%
+  calculate_features()
+
+
+# 10 fold cross validation
+ctrl <- trainControl(method = 'cv', number = 10)
+
+
+# random forest
+mark_0 <- Sys.time()
+  
+grid <-  expand.grid(.mtry = sqrt(ncol(train3)))  
+rf <- train(label ~ .,
+            data = train3,
+            method = 'rf',
+            tuneGrid = grid,
+            trControl = ctrl
+            )
+  
+
+mark_1 <- Sys.time()
+
+# svm radial 
+svm <- train(label ~ .,
+             data = train3,
+             method = 'svmRadial',
+             preProc = c('center', 'scale'),
+             tuneLength = 8,
+             trControl = trainControl(method = 'cv')
+             )
+
+mark_2 <- Sys.time()
+
+# knn classifier
+knn <- train(label ~ .,
+             data = train3,
+             method = "knn",
+             preProc = c("center", "scale"),
+             tuneLength = 10,
+             trControl = ctrl
+             )
+
+mark_3 <- Sys.time()
+
+# multinomial regression
+multinom <- train(label ~ .,
+                  data = train3,
+                  method = 'multinom',
+                  tuneLength = 8,
+                  trControl = ctrl
+                  )
+
+mark_4 <- Sys.time()
+
+# naive bayes
+nb <- train(label ~ .,
+            data = train3,
+            method = 'naive_bayes',
+            tuneLength = 8,
+            trControl = ctrl
+            )
+
+
+mark_5 <- Sys.time()
+
+```
+
+### Model Training Durations
+
+```{r training duration}
+# calculate durations
+rf_dur <- difftime(mark_1, mark_0, units = 'mins') %>% round(1)
+svm_dur <- difftime(mark_2, mark_1, units = 'mins') %>% round(1)
+knn_dur <- difftime(mark_3, mark_2, units = 'mins') %>% round(1)
+mn_dur <- difftime(mark_4, mark_3, units = 'mins') %>% round(1)
+nb_dur <- difftime(mark_5, mark_4, units = 'mins') %>% round(1)
+
+# show all training durations
+data.frame(
+  model_type = c('Random Forest', 'SVM Radial', 'KNN', 'Multinomial Logisitic Regression', 'Naive Bayes'),
+  minutes = c(rf_dur, svm_dur, knn_dur, mn_dur, nb_dur)
+) %>%
+  arrange(desc(minutes))
+
+```
+
+### Resample Models
+
+```{r accuracy check}
+# resampling  results
+rs <- resamples(list(rf = rf, svm = svm, knn = knn, multinomial = multinom, naive_bayes = nb))
+summary(rs)
+
+```
+
+Based on the results above, SVM looks to be the most accurate model.
+
+```{r test accuracy}
+
+test2$rf <- predict(rf, test2)
+test2$svm <- predict(svm, test2)
+test2$knn <- predict(knn, test2)
+test2$mn <- predict(multinom, test2)
+test2$nb <- predict(nb, test2)
+
+rf_acc <- sum(test2$label == test2$rf) / nrow(test2)
+svm_acc <- sum(test2$label == test2$svm) / nrow(test2)
+knn_acc <- sum(test2$label == test2$knn) / nrow(test2)
+mn_acc <- sum(test2$label == test2$mn) / nrow(test2)
+nb_acc <- sum(test2$label == test2$nb) / nrow(test2)
+
+# show accuracy
+data.frame(
+  model_type = c('Random Forest', 'SVM Radial', 'KNN', 'Multinomial Logisitic Regression', 'Naive Bayes'),
+  accuracy = c(rf_acc, svm_acc, knn_acc, mn_acc, nb_acc)
+) %>%
+  arrange(desc(accuracy))
+
+```
+
+After calculating the prediction accuracy on the test set, the random forest model has a minor lead over the support vector machine model.
+
+### Classification Evaluation
+
+```{r eval rf}
+# confusion matrix for random forest
+with(test2, confusionMatrix(rf, label))
+```
+
+```{r eval svm}
+# confusion matrix for SVM Radial
+confusionMatrix(test2$svm, test2$label)
+```
+
+```{r eval knn}
+# confusion matrix for SVM Radial
+confusionMatrix(test2$knn, test2$label)
+```
+
+```{r eval multinomial}
+# confusion matrix for multinomial regression
+with(test2, confusionMatrix(mn, label))
+```
+
+```{r eval naive_bayes}
+# confusion matrix for naive bayes
+with(test2, confusionMatrix(nb, label))
+```
+
+As expected, the errors in the supervised models trained using only variables summarizing subsections or shapes of the original training data led to specific items of clothing to be confused for others. Similarly shaped items show the most classifications. 
+
+The random forest model commonly misclassifies pullovers as coats and shirts as t-shirts/tops or pullovers. Additionally, for each of the three types of footwear, the errors predicted by the model are most likely one of other two footwear types.
 
 
