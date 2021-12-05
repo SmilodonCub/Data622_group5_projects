@@ -282,7 +282,7 @@ One of the methods that can be used for dimensionality reduction is feature engi
 - % of non-white pixels in each of the 28 columns
 - % of rows that are completely white
 - % of columns that are completely white
-- 20 custom blocks that are subsections of the grids, showing percent non-white as well as percent light grey (1 - 122).
+- 10 custom blocks that are subsections of the grids, showing percent non-white as well as percent light grey (1 - 122).
 
 The features listed were determined by visually analyzing the faceted chart in the EDA section that showed the most used pixels for each of the types of fashion item. 
 
