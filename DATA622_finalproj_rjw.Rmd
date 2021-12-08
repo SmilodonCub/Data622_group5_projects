@@ -1,0 +1,584 @@
+---
+title: 'DATA624: Final Project'
+author: "rjw"
+date: "11/26/2021"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+#setwd('C:/Users/robbj/OneDrive/CUNY_SPS/DATA622')
+```
+
+## Functions & Packages
+- The first function sets panel, axis, legend, and strip properties to all calls to ggplot in the rest of the document
+- the remaining functions are meant to integrate all models for purposes of visualizing and comparing results
+
+```{r message=F, warning=F}
+library(tidyverse)
+#library(keras)
+library(magrittr)
+library(ggplot2)
+library(caret)
+
+
+## 1. Function to set panel, axis, legend, and strip properties to all calls to ggplot in the rest of the document
+
+gg_theme <- function(){
+  theme_bw()
+    theme(
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+      panel.background = element_blank(),
+      axis.title = element_text(face="bold"),
+      axis.text = element_text(face="bold"),
+      axis.line = element_line(color="#17212d"),
+      legend.title=element_text(size=rel(.75),face="bold"),
+      legend.text=element_text(size=rel(.65),face="bold"),
+      legend.key=element_rect(size=rel(.5),fill="transparent", color=NA),
+      legend.key.size=unit(1, "lines"),
+      legend.background=element_rect(fill="transparent",color=NA),
+      strip.background=element_rect(fill="#17212d", color="#17212d"),
+      strip.text=element_text(color="white", face="bold")
+     )
+
+}
+
+# this command will set the theme for the rest of the document
+theme_set(gg_theme())
+## _________________________________________________________
+
+## 2. This function takes in a list of models (of class: train) and the test (no labels)
+## Will output a dataframe of 10,000  obs where each column is a vector of model predictions
+## Save the output to a variable and use an input to other functions:
+      ## plot.con.mat()
+      ## get.overall.acc()
+      ## get.byclass.acc()
+    
+get.prediction.df <- function(mod.list, test.data){
+    df <- as.data.frame(matrix(NA, ncol = length(mod.list), nrow =nrow(test.data)))
+    c.names <- vector()
+    
+    for(i in 1:length(mod.list)){
+      c.names[i] <- names(mod.list)[i]
+      mod.pred <- predict(mod.list[[i]], test.data) %>% as.data.frame()
+      df[,i] <- mod.pred
+    }
+    colnames(df) <- c.names
+    return(df)
+}
+##_____________________________________________________________
+
+## 3. Function for confusion matrix visualization (See results section)
+## Arguments: vector of model predictions, vector of test set labels, and string of the name of the model 
+## Output is a confusion matrix with 'prop' indicating the proportion of each predicted class relative to the sum of its reference class 
+
+plot.confusion.matrix <- function(mod.predict, test.data.label, mod.type){
+  
+  # tabulate confusion matrix as a dataframe
+  tab <- data.frame(confusionMatrix(mod.predict, test.data.label)$table)
+  
+  # clothing categories
+  label_cats = c('Top', 'Trouser', 'Pullover', 'Dress', 'Coat',  
+                'Sandal', 'Shirt', 'Sneaker', 'Bag', 'Boot')
+  
+  # group by Reference class to calculate per class proportions for each predicted value
+  plot.tab <- tab %>%
+    group_by(Reference) %>%
+    mutate(prop = Freq/sum(Freq))
+
+  # make a heatmap of the confusion matrix
+  ggplot(data = plot.tab, mapping = aes(x = Reference, y = Prediction, fill =prop)) +
+    geom_tile() +
+    geom_text(aes(label = Freq), vjust = .5, fontface  = "bold", alpha = 1) +
+    scale_fill_viridis_c(direction=-1, option="plasma")+
+    #scale_fill_gradient("blues") +  
+    xlim(rev(levels(tab$Reference))) +
+    scale_x_discrete(labels=label_cats) +
+    scale_y_discrete(labels=label_cats) +
+    labs(x="Actual",
+       y="Predicted",
+       title = paste0(mod.type, " Confusion Matrix Heatmap"))
+}
+## ___________________________________________________
+
+## 4. Function to compare overall accuracy and Kappa Score results for each model, returns a bar graph 
+get.overall.acc <- function(model.prediction.df, test.set.labels){
+  df <- data.frame()
+  names<- c()
+  
+  for(i in 1:ncol(model.prediction.df)){
+    #print(i)
+    names[i] <- colnames(model.prediction.df[i])
+    df <- rbind(df, confusionMatrix(model.prediction.df[,i], test.set.labels)$overall %>% 
+                    data.frame() %>% 
+                    t() )
+  }
+  df %>% dplyr::select(Accuracy,Kappa) %>% 
+    mutate(model=names) %>% 
+    pivot_longer(-model) %>%  
+      ggplot(aes(x=model,y=value)) + geom_bar(stat="identity", col="#17212d", fill="#17212d") +
+      geom_text(aes(label = round(value,3)), size = 4, hjust = 0.5, vjust = 3, col="white") +
+      facet_wrap(~name)
+}
+
+###_____________________________________________________________
+
+## 5. Plots by-class accuracy results for all models 
+get.byclass.acc <- function(model.prediction.df, test.set.labels){
+  df <- data.frame()
+  model <- c()
+  # clothing categories
+  label_cats = c('Top', 'Trouser', 'Pullover', 'Dress', 'Coat',  
+                'Sandal', 'Shirt', 'Sneaker', 'Bag', 'Boot')
+  
+  for(i in 1:ncol(model.prediction.df)){
+    print(i)
+    model <- colnames(model.prediction.df[i])
+    
+    df <- rbind(confusionMatrix(model.prediction.df[,i], test.set.labels)$byClass %>% 
+      data.frame() %>% 
+      dplyr::select(Sensitivity, Accuracy=Balanced.Accuracy) %>%   
+      rownames_to_column(var="Class") %>%
+      pivot_longer(-Class) %>% 
+      mutate(model=model),
+      df)
+    }
+  df %>% 
+    ggplot(aes(y=value,x=Class, fill=model)) + 
+    geom_col(position="dodge", width=0.25)+
+    scale_fill_viridis_d(option="plasma")+ 
+    scale_x_discrete(labels=label_cats) +
+    labs(x="",y="",title="By-Class Accuracy Metrics")+
+    #geom_text(aes(label = round(value,3)), size = 3, hjust = .4, vjust = 3, col="white",position="dodge") +
+    facet_wrap(~name,nrow=5)
+}
+
+
+```
+
+
+ 
+```{r preprocessing, include=F, eval=F, echo=F}
+
+# fashion_mnist <- keras::dataset_fashion_mnist()
+# c(train.images, train.labels) %<-% fashion_mnist$train
+# c(test.images, test.labels) %<-% fashion_mnist$test
+
+# test <- read.csv('fashion-mnist_test.csv/fashion-mnist_test.csv')
+# train <- read.csv('fashion-mnist_train.csv/fashion-mnist_train.csv')
+# 
+# labels <- c('T-shirt/top', 'Trouser','Pullover','Dress','Coat','Sandal','Shirt','Sneaker','Bag','Ankle boot')
+# test$label <- factor(test$label, labels=labels)
+# train$label<- factor(train$label, labels=labels)
+# npix <- ncol(train) - 1
+# 
+# head(test)
+
+# import data from keras package
+fashion_mnist = keras::dataset_fashion_mnist()
+c(train.images, train.labels) %<-% fashion_mnist$train
+c(test.images, test.labels) %<-% fashion_mnist$test
+
+#Next, we normalize the image data by dividing the pixel values by the maximum value of 255.
+train.images = data.frame(t(apply(train.images, 1, c))) / max(fashion_mnist$train$x)
+test.images = data.frame(t(apply(test.images, 1, c))) / max(fashion_mnist$train$x)
+
+# Now, we combine the training images train.images and labels train.labels as well as test images test.images and labels test.labels in separate data sets, train.data and test.data, respectively.
+pixs = ncol(fashion_mnist$train$x)
+names(train.images) = names(test.images) = paste0('pixel', 1:(pixs^2))
+train.labels = data.frame(label = factor(train.labels))
+test.labels = data.frame(label = factor(test.labels))
+train.data = cbind(train.labels, train.images)
+test.data = cbind(test.labels, test.images)
+
+
+# As train.labels and test.labels contain integer values for the clothing category (i.e. 0, 1, 2, etc.), we also create objects train.classes and test.classes that contain factor labels (i.e. Top, Trouser, Pullover etc.) for the clothing categories. We will need these for some of the machine learning models later on.
+
+label_cats = c('Top', 'Trouser', 'Pullover', 'Dress', 'Coat',  
+                'Sandal', 'Shirt', 'Sneaker', 'Bag', 'Boot')
+train.classes = factor(label_cats[as.numeric(as.character(train.labels$label)) + 1])
+test.classes = factor(label_cats[as.numeric(as.character(test.labels$label)) + 1])
+levels(test.classes)
+
+
+```
+
+## Methods 
+
+
+Principle Component Analysis was used to reduce the number of dimensions. The dataset was reduced from 255 predictors to 10 principle components which explain 99% of the variance of the dataset. This reduced dataset requires less computing resources and contains the majority of the information. PCA statistically reduces the dimensions of a set of correlated variables by transforming them into a smaller number of linearly uncorrelated variables. The calculated principal components are linear combinations of the original data.
+
+
+```{r method, include=F, eval=F,echo=F}
+train.images.ave = data.frame(pixel = apply(train.images, 2, mean), 
+                               x = rep(1:pixs, each = pixs), 
+                               y = rep(1:pixs, pixs))
+
+ggplot() +
+  geom_raster(data = train.images.ave, aes(x = x, y = y, fill = pixel)) +
+
+  labs(x = NULL, y = NULL, fill = "Average scaled pixel value") +
+  ggtitle('Average image in Fashion MNIST training data') + 
+  scale_fill_viridis_c(option="plasma")
+
+
+library(stats)
+cov.train = cov(train.images)                      
+pca.train = prcomp(cov.train)                  
+plotdf = data.frame(index = 1:(pixs^2), 
+                    cumvar = summary(pca.train)$importance["Cumulative Proportion", ])
+t(head(plotdf, 50))
+
+ggplot() + 
+  geom_point(data = plotdf, aes(x = index, y = cumvar), color = "red") +
+  labs(x = "Index of primary component", y = "Cumulative proportion of variance") +
+
+  theme(strip.background = element_rect(fill = 'white', colour = 'black'))
+
+## select a threshold
+pca.dims99 = which(plotdf$cumvar >= .99)[1]
+pca.rot99 = pca.train$rotation[, 1:pca.dims99]  
+train.images.pca99 = data.frame(as.matrix(train.images) %*% pca.rot99)
+test.images.pca99  = data.frame(as.matrix(test.images) %*% pca.rot99)
+train.data.pca99 = cbind(train.images.pca99, label = factor(train.data$label))
+test.data.pca99 = cbind(test.images.pca99, label = factor(test.data$label))
+
+## select a threshold
+# pca.dims93 = which(plotdf$cumvar >= .93)[1]
+# pca.rot93 = pca.train$rotation[, 1:pca.dims93]  
+# train.images.pca93 = data.frame(as.matrix(train.images) %*% pca.rot93)
+# test.images.pca93  = data.frame(as.matrix(test.images) %*% pca.rot93)
+# train.data.pca93 = cbind(train.images.pca93, label = factor(train.data$label))
+# test.data.pca93 = cbind(test.images.pca, label = factor(test.data$label))
+```
+
+
+### d. Models
+
+Three models were trained, and quality of predictions was evaluated. For each model, hyperparamters were tuned using 10-fold-cross-validation on the training set to find the combination that maximized Accuracy. Due to the large number of observations in the Fashion MNIST training set, only the first 10,000 observation were used due to insufficient computing power. 
+
+#### 1. Stochastic Gradient Boosting 
+Gradient boosting is an ensemble machine learning technique that has application in both regression and classification, and is typically used in decision trees. It is premised on building a sequence of weak models where each at each iteration a new tree fits the errors from the previous. For this application, a stochastic gradient boosting (SGB) model will be used. In SGB, a random subsample (without replacement) of variables is used at each iteration so that correlation between successive trees is reduced. Successive trees leverage this randomness to update errors of the base.
+
+There are four hyperparameters that are to be tuned for this model, and a brief description of each is provided as well as the values that were supplied to the grid for cross validation purposes of the model tuning effort:
+
+1.  *Number of trees (n.trees):* This refers to the total number of trees to be used in the ensemble. Too many trees can result in overfitting while too few trees can result in underfitting due to the corrective, iterative nature of the algorithm where successive tree's correct the errors at the previous step. Values from 500 to 2500 by 500 were tested during cross validation.
+2.  *Interaction depth (interaction.depth)*: Controls the depth of the individual trees and subset of random variables at each iteration step. Higher depth trees allows capturing of predictor interactions but could also result in over-fitting. Values from 1 to 7 by 2 were tested.
+3.  *Learning rate (shrinkage)*: This parameter sets the rate at which a tree learns from the base learner. Smaller rates learn less quickly thus reducing the chances of overfitting but will require a larger number of trees and computation power. Values 0.01, and 0.1 were tested.
+4. *Minimum number of observations in terminal nodes (n.minobsinnode)*: Like interaction depth, this also controls the complexity of each tree. Values of 1, 2, and 5 were tested.  
+
+- The final values used for the model were n.trees = 2000, interaction.depth = 5, shrinkage = 0.01 and n.minobsinnode = 1
+```{r}
+# from github repo
+gbm.mod <- readRDS("gbm.rds")
+
+```
+
+```{r include=F, eval=F}
+# subset train set 
+train.images.pca99.sub <- train.images.pca99[1:10000,]
+train.data.pca99.sub <- train.data.pca99[1:10000,]
+train.data.pca99.sub <- train.data.pca99[1:10000,]
+
+# hyperparameter grid used for CV
+# grid = expand.grid(.n.trees = seq(500, 2500 , by=500),
+#                    .interaction.depth=seq(1,7,by=2),
+#                    .shrinkage=c(0.1,0.01),
+#                    .n.minobsinnode=c(1,2))
+
+grid = expand.grid(.n.trees = seq(1200),
+                   .interaction.depth=5,
+                   .shrinkage=c(.01),
+                   .n.minobsinnode=c(1))
+
+set.seed("1234567890")
+gbm.mod <- train(x = train.images.pca99.sub, 
+                  y = train.data.pca99.sub$label,
+                  method="gbm",
+                  #distribution="adaboost",
+                  #preProc=c("center","scale"),  
+                  tuneGrid = grid,
+                  trControl=ctrl,
+                  verbose=F)
+
+
+ #saveRDS(gbm.mod, "C:/Users/robbj/OneDrive/CUNY_SPS/DATA622/gbm.rds")
+gbm.mod <- readRDS("gbm.rds")
+gbm.mod %>% plot
+
+# make predictions on test set
+# gbm.predict <- predict(gbm.mod, newdata = test.data.pca %>% dplyr::select(-label))# make predictions on test set
+# 
+# gbm.cm <- confusionMatrix(gbm.predict, test.data.pca$label)
+
+
+```
+
+#### 2. Random Forest
+Random forest is an ensemble decision tree method where a series of decision trees independent from each other are provided a random subset of the predictor space. The results of each bootstrapped iteration are then given an aggregated response. There is only one hyperparameter for the `rf` implementation of the random forest algorithm that was used.
+
+1.  *Number of variables (mtry):* This defines the manner in which variable bootstrapping is conducted by controlling the maximum number of variables that are subset at each interation of the ensemble. Integer values from 1 to 6 inclusive were tested during cross validation.
+
+The final value used for the model was mtry = 3.
+
+```{r}
+rf.mod <- readRDS("rf.rds") 
+
+```
+
+```{r include=F, eval=F}
+
+ctrl = trainControl(method = "repeatedcv", 
+                             number = 5, 
+                             repeats = 1, 
+                             savePredictions = TRUE)
+set.seed(1234)
+rf = train(x = train.images.pca99, 
+                 y = train.data.pca99$label,
+                 method = "rf", 
+                 ntree = 100,
+                 metric = "Accuracy", 
+                 trControl = ctrl, 
+                 tuneGrid = expand.grid(.mtry=c(1:5))
+           )
+    print(rf)
+
+saveRDS(rf, "C:/Users/robbj/OneDrive/CUNY_SPS/DATA622/rf.rds")
+saveRDS(test.data.pca, "C:/Users/robbj/OneDrive/CUNY_SPS/DATA622/test.data.pca.rds")
+
+rf.mod <- readRDS("rf.rds")    
+test.data.pca <- readRDS("test.data.pca.rds")   
+# make predictions on test set
+rf.predict <- predict(rf.mod, newdata = test.data.pca %>% dplyr::select(-label))# make predictions on test set
+
+# Confusion matrix
+rf.cm <- confusionMatrix(rf.predict, test.data.pca$label)
+rf.cm$overall
+class(rf.mod)
+
+```
+
+
+
+#### 3. Neural Network
+
+A neural network based on averaging of random seeds, `avNNet` was trained. The following hyperparamters were tuned using cross-validation.
+
+1.  *Number of hidden layers (size):* This defines the complexity of the network
+2.  *Decay:* penalty term for large coefficients; used to regularaize model
+
+
+The final values used for the model were size = 12, decay = 0.01
+
+```{r}
+nn.mod <- readRDS("nn.mod.rds")
+
+```
+
+```{r include=F, eval=F}
+# subset train set 
+train.images.pca99.sub <- train.images.pca99[1:10000,]
+train.data.pca99.sub <- train.data.pca99[1:10000,]
+train.data.pca99.sub <- train.data.pca99[1:10000,]
+
+# nnet.grid <- expand.grid(.decay=c(0.1,0.01),
+#                          .size=seq(5,13,2),
+#                          .bag=F)
+
+nnet.grid <- expand.grid(.decay=c(0.01),
+                         .size=12,# should increase
+                         .bag=F)
+
+nn.mod <- train(x = train.images.pca99.sub, 
+                  y = train.data.pca99.sub$label,
+                  method="avNNet",
+                  #distribution="adaboost",
+                  preProc=c("center","scale"),  
+                  tuneGrid = nnet.grid,
+                  trControl=ctrl,
+                  verbose=F,
+                linout=T,
+                trace=F,
+                maxit=500
+                )
+saveRDS(nn.mod, "C:/Users/robbj/OneDrive/CUNY_SPS/DATA622/nn.mod.rds")
+
+plot(nn.mod)
+```
+
+
+```{r clustering, include =F, eval=F}
+n<-5000
+label <-  train.data.pca99 %>% slice(1:n) %>% dplyr::select(label)
+train.data.pca99.clust <- train.data.pca99 %>% dplyr::select(-label) %>% slice(1:n) %>% scale() %>% data.frame()
+train.data.pca99.noclust <- train.data.pca99 %>% dplyr::select(-label) %>% slice(1:n) 
+train.data.pca93.clust <- train.data.pca93 %>% dplyr::select(-label) %>% slice(1:n) %>% scale() %>% data.frame()
+train.data.pca93.noclust <- train.data.pca93 %>% dplyr::select(-label) %>% slice(1:n) 
+library(cluster)
+library(dendextend)
+# calculate dissimilarity matrix
+set.seed(9999)
+distances99 <- dist(train.data.pca99.clust)
+distances93 <- dist(train.data.pca93.clust)
+
+# create clusters from dissimilarity matrix using hclust and wards linkage 
+set.seed(9999)
+hclust99 <- hclust(distances99, method="average")
+hclust93 <- hclust(distances93, method="average")
+plot(hclust93)
+
+# plot dendrogram
+# as.dendrogram(hclust) %>% 
+#   color_branches(k=3) %>% 
+#   ggplot() + 
+#     ggtitle("3 cluster Dendrogram")
+
+# assign labels back into the datase
+train.data.pca99.clust$clust <- cutree(hclust99, 4)
+clusters99 <- data.frame( cluster99=factor(cutree(hclust99, 4)))
+
+train.data.pca93.clust$clust <- cutree(hclust93, 7)
+clusters93 <- data.frame( cluster93=factor(cutree(hclust93, 7)))
+
+
+#  encoding
+dummy99 <- dummyVars(" ~ .", data=clusters99)
+clusters99 <- data.frame(predict(dummy99, newdata = clusters99))
+
+dummy93 <- dummyVars(" ~ .", data=clusters93)
+clusters93 <- data.frame(predict(dummy93, newdata = clusters93))
+
+
+
+train.data.pca99.clust <- train.data.pca99.clust %>% bind_cols(clusters99)
+train.data.pca93.clust <- train.data.pca93.clust %>% bind_cols(clusters93)
+
+rf_clust99 = train(x = train.data.pca99.clust, 
+                 y = label$label,
+                 method = "rf", 
+                 ntree = 100,
+                 metric = "Accuracy", 
+                 trControl = ctrl, 
+                 tuneGrid = expand.grid(.mtry=c(2:8))
+           )
+   
+rf_clust93 = train(x = train.data.pca93.clust, 
+                 y = label$label,
+                 method = "rf", 
+                 ntree = 100,
+                 metric = "Accuracy", 
+                 trControl = ctrl, 
+                 tuneGrid = expand.grid(.mtry=c(2:8))
+           )
+rf_no_clust99 = train(x = train.data.pca99.noclust, 
+                 y = label$label,
+                 method = "rf", 
+                 ntree = 100,
+                 metric = "Accuracy", 
+                 trControl = ctrl, 
+                 tuneGrid = expand.grid(.mtry=c(2:10))
+           )
+
+rf_no_clust93 = train(x = train.data.pca93.noclust, 
+                 y = label$label,
+                 method = "rf", 
+                 ntree = 100,
+                 metric = "Accuracy", 
+                 trControl = ctrl, 
+                 tuneGrid = expand.grid(.mtry=c(2:4))
+           )
+print(rf_clust99)
+print(rf_no_clust99)
+print(rf_clust93)
+print(rf_no_clust93)
+plot(rf_no_clust)
+plot(rf_clust)
+varImp(rf_clust99) %>% ggplot
+varImp(rf_clust93) %>% ggplot
+predict(rf_clust93, train.data.pca93.clust)
+```
+
+## Results
+
+```{r}
+## these are test set data i used based on 10 principle components
+## and each of the three models 
+download.file("https://raw.githubusercontent.com/robertwelk/DATA622/main/test.data.pca.rds","test.data.pca.rds", method="curl")
+test.data <- readRDS("test.data.pca.rds")
+
+download.file("https://raw.githubusercontent.com/robertwelk/DATA622/main/rf.rds","rf.rds", method="curl")
+rf.mod <- readRDS("rf.rds")
+
+download.file("https://raw.githubusercontent.com/robertwelk/DATA622/main/gbm.rds","gbm.rds", method="curl")
+gbm.mod <- readRDS("gbm.rds")
+
+
+######## input all model object to this list ###########
+# The functions above use this list to generate result summary visuals 
+mod.list <- list(random.forest=rf.mod,
+                 gradient.boosted=gbm.mod,
+                 neural.net=nn.mod
+                 )
+##############################################
+
+
+## here, a dataframe that stores predictions for all models is made
+## Please note: this function will have to be run each time a test set with different number/names of predictors is used so multiple mod.lists might have to be made for different test set data
+model.pred.df <- get.prediction.df(mod.list, test.data)
+
+  ## example of merging together different test set data: 
+      ## model.pred.df <- model.pred.df %>% bind_cols(get.prediction.df(mod.list2, test.data2) )
+
+```
+
+### Overall Results
+
+
+A high-level overview of the model based on metrics Accuracy and Cohen's Kappa, not considering classes of clothing.
+
+Accuracy describes how often the classifier was correct, and is defined as the sum of true positive and true negatives divided by the total number of observations. This was determined to be an appropriate metric to evaluate overall model performance since the test set classes are balanced.  
+
+The Cohen's Kappa statistic is a measure of how well the model prediction matched the labeled test set, while controlling for the accuracy that would have been produced by a random classifier. As a stand alone metric, kappa can be difficult to interpret, but is useful for between model comparisons.
+
+```{r fig.width=13, fig.height=5}
+
+get.overall.acc(model.pred.df, test.data$label)
+
+```
+
+### By-Class Results
+
+Next a model results are evaluated considering class categories 
+
+The following metrics were calculated on each of the classes:
+- Once again accuracy is used. 
+- We also consider Sensitivity, the true positive rate
+ 
+This graph allows for a comparison of model performances for each article of clothing.  
+
+```{r fig.width=15, fig.height=5, warning=F, message=F}
+get.byclass.acc(model.pred.df, test.data$label)
+```
+
+### Confusion Matrices 
+Shows predictive power classes and models.  
+
+```{r warning=F, message=F}
+
+plot.confusion.matrix(model.pred.df$random.forest, test.data$label, "Random Forest")
+plot.confusion.matrix(model.pred.df$gradient.boosted, test.data$label, "Gradient Boosted")
+plot.confusion.matrix(model.pred.df$neural.net, test.data$label, "Neural Net")
+
+
+```
+
+
+
+
+
+
+
+
