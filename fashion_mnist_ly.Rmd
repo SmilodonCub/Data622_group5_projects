@@ -54,8 +54,9 @@ library(caret)
 library(conflicted)
 library(factoextra)
 library(purrr)
+library(scales)
 
-conflict_scout()
+# conflict_scout()
 conflict_prefer('filter', 'dplyr')
 ```
 
@@ -99,9 +100,11 @@ test$label <- factor(test$label, labels = c('T-shirt/top',
                                             'Ankle boot'))
 ```
 
-## Functions
+We also imported the data in csv format, downloaded from kaggle. Each observation is a picture and each variable is one pixel within each picture. The labels have been converted to factors.
+
 
 ```{r functions}
+### These functions are used to manipulate the structure of the raw data tables
 
 # convert number to 6 digit string
 num_to_str_5 <- function(num) {
@@ -228,6 +231,8 @@ row_index_list <- function(y) {
 
 ## EDA
 
+### Long Table
+
 ```{r eda, fig.height = 8}
 # use a smaller training set, 10% or 6k rows
 set.seed(101)
@@ -238,7 +243,28 @@ train2 <- train[tenth,]
 train2_grid <- as_grid_vars(train2)
 
 head(train2_grid)
+```
 
+Using a function, we have gathered each of the pixel variables into a long format table and have converted each pixel to x and y coordinates, with the origin point in the lower left. Each row has also been labeled as a 5 digit number in string format. This grid location conversion was done to facilitate the feature engineering done below, allowing us to see each picture using the commonly known two dimensional chart, with x on the horizontal axis and y on the vertical axis. Additionally, this makes plotting significantly easier.
+
+For the charts below, we're using a sample of 10% or 6,000 observations to explore and visualize what the data contains.
+
+### Plot 4x4 Observations
+
+```{r}
+# plot random 4x4
+plot_row(seq(101,116,1))
+
+# plot another random 4x4
+plot_row(seq(201,216,1))
+
+```
+
+Above, we can see 16 observations from rows 101 - 116 of the sample set. At first glance, there are some clear differences between some classes. Shoes, shirts, and bags are clearly different. The differences between ankle boots, sneakers, and sandals vary by details rather than overall shape. Also, all types of tops, including dresses, have very similar shapes. It's very difficult to tell the differences between shirts, pullovers, and coats.
+
+### Most Used Pixels
+
+```{r}
 # see which pixels are used the most
 train2_grid %>%
   group_by(x, y) %>%
@@ -247,7 +273,13 @@ train2_grid %>%
   ggplot(aes(x = x, y = y, fill = not_white)) +
   geom_tile() +
   theme(aspect.ratio = 1)
+```
 
+The above chart above is a heat map of the pixels that are used in the sample set, counting only any non-white pixel. Overall, we can see that the center is the most likely to have some color. Stepping back, we can see the outline of a shirt, a shoe, and the space between trousers. For modeling purposes, we can see that the corners aren't used at all, so its likely safe to leave those points out.
+
+### Most Used Pixels by Label
+
+```{r}
 # see which pixels are used the most by label
 train2_grid %>%
   group_by(x, y, label) %>%
@@ -260,12 +292,9 @@ train2_grid %>%
   theme(aspect.ratio = 1) +
   facet_wrap(~label)
 
-# plot random 4x4
-plot_row(seq(101,116,1))
-
-# plot another random 4x4
-plot_row(seq(201,216,1))
 ```
+
+The visualization above is similar to the previous chart, showing most used pixels for each label. Here we are attempting to generalize the shapes and pixels used by each of the different fashion items. Looking at the shoes, we can see that there are full horizontal rows that are completely white, which is also common to bags. As we look at the differences and similarities of each of the classes, the shape of different sections allows us to classify the labels in our minds, which we'll try to replicate with feature engineering below. If we can create new variables to try and capture the differences in shape, we can see if those variables will be useful in contributing to the accuracy of the models we train.
 
 ## Feature Engineering
 
@@ -570,7 +599,7 @@ This section uses 10 fold cross validation to train the following models:
 
 - Random forest
 - Support vector machine using a radial kernel
-- Knn nearest neighbor
+- KNN nearest neighbor
 - Multinomial logistic regression
 - Naive bayes
 
@@ -705,37 +734,41 @@ data.frame(
 
 ```
 
-After calculating the prediction accuracy on the test set, the random forest model has a minor lead over the support vector machine model.
+After calculating the prediction accuracy on the test set, the support vector machine model using a radial kernel has a minor lead over the random forest model model.
 
 ### Classification Evaluation
 
-```{r eval rf}
-# confusion matrix for random forest
-with(test2, confusionMatrix(rf, label))
-```
-
 ```{r eval svm}
 # confusion matrix for SVM Radial
-confusionMatrix(test2$svm, test2$label)
-```
+cm <- confusionMatrix(test2$svm, test2$label)
 
-```{r eval knn}
-# confusion matrix for SVM Radial
-confusionMatrix(test2$knn, test2$label)
-```
-
-```{r eval multinomial}
-# confusion matrix for multinomial regression
-with(test2, confusionMatrix(mn, label))
-```
-
-```{r eval naive_bayes}
-# confusion matrix for naive bayes
-with(test2, confusionMatrix(nb, label))
+cm$table
 ```
 
 As expected, the errors in the supervised models trained using only variables summarizing subsections or shapes of the original training data led to specific items of clothing to be confused for others. Similarly shaped items show the most classifications. 
 
-The random forest model commonly misclassifies pullovers as coats and shirts as t-shirts/tops or pullovers. Additionally, for each of the three types of footwear, the errors predicted by the model are most likely one of other two footwear types.
+The SVM model commonly misclassifies pullovers as coats and shirts as t-shirts/tops or pullovers. Additionally, for each of the three types of footwear, the errors predicted by the model are most likely one of other two footwear types.
 
+```{r}
+# overall accuracy
+overall_accuracy <-cm$overall[1]
 
+# data frame of results by class
+byclass <- cm$byClass %>% 
+  as.data.frame()
+
+# add in label as variable instead of row name
+byclass$label <- row.names(byclass) %>%
+  str_replace('Class: ','')
+
+# plot
+ggplot(byclass, aes(x = `Pos Pred Value`, y = reorder(label, `Pos Pred Value`))) +
+  geom_col() +
+  geom_vline(xintercept = overall_accuracy, lty = 2, color = 'blue') +
+  scale_x_continuous(labels = percent_format(accuracy=1)) +
+  labs(y = '', title = 'SVM Accuracy by Label') +
+  theme_bw()
+
+```
+
+The above plot shows the model's accuracy by label, with the blue vertical line representing the overall accuracy. We can see that shirts, pullovers, coats, and T-shirt/tops were the classes that performed the poorest. The similar shapes of the items suggest that the derived variables that were used did not adequately pick up the variance among the items.
