@@ -1367,7 +1367,7 @@ cm <- confusionMatrix(test2$svm, test2$label)
 cm$table
 ```
 
-As expected, the errors in the supervised models trained using only variables summarizing subsections or shapes of the original training data led to specific items of clothing to be confused for others. Similarly shaped items show the most classifications. 
+As expected, the errors in the supervised models trained using only variables summarizing subsections or shapes of the original training data led to specific items of clothing to be confused for others. Similarly shaped items show the most misclassifications. 
 
 The SVM model commonly misclassifies pullovers as coats and shirts as t-shirts/tops or pullovers. Additionally, for each of the three types of footwear, the errors predicted by the model are most likely one of other two footwear types.
 
