@@ -1,0 +1,1680 @@
+---
+title: "Fashion MNIST PCA"
+subtitle: "Group Final Project"
+author: "David Blumenstiel, Bonnie Cooper, Robert Welk, Leo Yi"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: yes
+    toc_depth: 4
+    toc_float: yes
+    number_sections: no
+    theme: paper
+    highlight: tango
+    font-family: Consolas
+    #code_folding: hide
+  pdf_document:
+    toc: yes
+---
+
+```{=html}
+<style type="text/css">
+
+code {
+  font-family: "Consolas";
+  font-size: 11px;
+}
+
+pre {
+  font-family: "Consolas";
+  font-size: 11px;
+}
+
+mark {
+  background-color: whitesmoke;
+  color: black;
+}
+
+</style>
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = T, warning = F, message = F, fig.width = 10)
+
+options(scipen = 9)
+```
+<br>
+
+## Intro
+
+* PCA on fashion MNIST for dimensionality reduction
+* SVM or something with Trees Classification before/after PCA
+
+About Fashion MNIST:  
+* 70,000 grayscale images
+* 10 distinct image categories
+* each image is 28x28 pixels (785 features including labels)
+
+## Importing the Data
+
+libraries used:
+```{r import}
+library(caret)
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+library(gridExtra)
+```
+
+helper functions for visualizing images
+```{r}
+show_digit = function(arr784, col = gray(12:1 / 12), ...) {
+  image(matrix(as.matrix(arr784[-785]), nrow = 28)[, 28:1], col = col, labels=FALSE, xaxt = "n", yaxt = "n", ...)
+}
+
+# load image files
+load_image_file = function(filename) {
+  ret = list()
+  f = file(filename, 'rb')
+  readBin(f, 'integer', n = 1, size = 4, endian = 'big')
+  n    = readBin(f, 'integer', n = 1, size = 4, endian = 'big')
+  nrow = readBin(f, 'integer', n = 1, size = 4, endian = 'big')
+  ncol = readBin(f, 'integer', n = 1, size = 4, endian = 'big')
+  x = readBin(f, 'integer', n = n * nrow * ncol, size = 1, signed = FALSE)
+  close(f)
+  data.frame(matrix(x, ncol = nrow * ncol, byrow = TRUE))
+}
+
+# load label files
+load_label_file = function(filename) {
+  f = file(filename, 'rb')
+  readBin(f, 'integer', n = 1, size = 4, endian = 'big')
+  n = readBin(f, 'integer', n = 1, size = 4, endian = 'big')
+  y = readBin(f, 'integer', n = n, size = 1, signed = FALSE)
+  close(f)
+  y
+}
+```
+
+loading the data
+```{r}
+# data location.  Set this to the data directory .
+archive <- "C:/Users/blume/OneDrive/Desktop/CUNY MSDS/Data 622/Final/fashion_MNIST_archive/"
+
+# load images
+train = load_image_file(paste0(archive, "train-images-idx3-ubyte"))
+test  = load_image_file(paste0(archive, "t10k-images-idx3-ubyte"))
+
+# load labels
+train_y = as.factor(load_label_file(paste0(archive, "train-labels-idx1-ubyte")))
+test_y  = as.factor(load_label_file(paste0(archive, "t10k-labels-idx1-ubyte")))
+```
+
+
+## Exploratory Visualizations
+
+Visualize a single fashion MNIST image:
+```{r fig1, fig.height = 4, fig.width = 4, fig.align = "center"}
+# view test image
+show_digit(train[20000, ])
+title('Example Image')
+```
+
+Visualiza a sampling of Fashion MNIST images: 
+```{r fig2, fig.height = 10, fig.width = 10, fig.align = "center"}
+# We plot 16 cherry-picked images from the training set
+num = 10
+par(mfrow=c(num, num), mar=c(0, 0.2, 1, 0.2))
+for (i in 1:(num*num)) {
+  show_digit(train[i, ])
+}
+```
+
+
+Visualize each pixel's mean value and standard deviation across all Fashion MNIST images in the training dataset. Additionally visualize which pixels
+
+```{r fig3, fig.height = 4, fig.width = 8, fig.align = "center"}
+par(mfrow = c(1,2))
+
+numcols = dim(train)[2]
+train.ave = data.frame(pixel = apply(train, 2, mean))
+show_digit( train.ave )
+title( 'Pixel Mean Value' )
+
+train.sd = data.frame(pixel = apply(train, 2, sd))
+show_digit( train.sd )
+title( 'Pixel Standard Deviation' )
+
+par(mfrow = c(1,1))
+```
+
+The figure above left visualizes the mean pixel values across the `train` dataset. The figure to the right shows the standard deviations for each pixel. For both plots, higher intensity values are rendered as dark whereas low values are light. For many of the pixels in the image, the mean values is intermediate (gray) whereas the standard deviation is relatively high (dark). These pixels make up most of the variance in the dataset. However, we can see that there are two regions of pixels towards the image center where the mean pixel value is high (dark) while the pixel standard deviation is low (light). For these regions, the pixels have consistently high pixel values.  Towards the periphery of the image there are pixels with both low mean values (light) and low standard deviation (light). These pixels have consistently low values.  
+
+The pixels with either consistently low or high values are of low information content and do not contribute much to models for image classification. These low information pixels add redundant features to the dataset. We can use PCA as a tool to reduce the dimensionality of the data such that we represent a maximum of data variance with fewer features. 
+
+The following figure highlights which pixels have a mean value less than 5% of the data range:
+
+```{r fig4, fig.height = 4, fig.width = 4, fig.align = "center"}
+train.avescale <- train.ave %>%
+  mutate( pixscale = pixel/255,
+          lowval = pixscale < 0.05 )
+
+show_digit(train.avescale$lowval)
+```
+
+
+## PCA
+
+We have shown above that there is redundancy in the fashion MNIST dataset. Here we will use PCA to reduce the number of features while retaining as much of the variance possible. PCA does this by finding a new set of axes that fit to the variance of the data. At heart, PCA is simply an eigendecomposition of the data which returns a set of eigenvectors and eigenvalues. Eigenvectors and eigenvalues describe the transformations necessary to go from the original axes to a new feature space.    
+
+We can use the results of PCA to perform a type of information compression on the original data by subsetting the amount of PCA components we use to describe the original data. For this analysis, we will use a criterion of 95% variance explained. From the 784 components that PCA yields, we will subset the minimum components needed such that the sum of the proportions of explained variance is greater than or equal to 95%. Such a manipulation is favorable because it will reduce the data redundance, the chances of overfitting, and the time necessary to train models.  
+
+```{r}
+# use the prcomp function
+train.pca <- prcomp( train )
+# pca summary
+sumTrain <- summary( train.pca )
+#calculate total variance explained by each principal component
+df_pca <- data.frame( t( sumTrain$importance ) )
+df_pca$compnum <- 1:dim(train)[2]
+```
+
+How many components account for 95% of the variance in the data?
+
+```{r}
+comp95 <- min(which(df_pca$Cumulative.Proportion>=0.95))
+comp95
+```
+
+
+Visualizing the cumulative explained variance described by the principal components with a Skree Plot:
+
+```{r fig5, fig.height = 5, fig.width = 10, fig.align = "center"}
+p1 <- ggplot( df_pca, aes( x = compnum, y = Proportion.of.Variance ) ) +
+  geom_line() +
+  ylim( c(0,0.3) ) +
+  xlim( c(0,20)) +
+  geom_hline( yintercept = 0.01, linetype = 'dotted', col = 'red') +
+  annotate("text", x = 2, y = 0.01, 
+           label = expression( "1%" ~ sigma), vjust = -0.5) +
+  theme_minimal() +
+  xlab( 'Principal Component Number' ) +
+  ylab( 'Proportion Explained Variance' ) +
+  ggtitle( 'Skree plot' )
+
+p2 <- ggplot( df_pca, aes( x = compnum, y = Cumulative.Proportion ) ) +
+  geom_line() +
+  ylim( c(0,1.1) ) +
+  xlim( c(0,200)) +
+  geom_hline( yintercept = 0.95, linetype = 'dotted', col = 'red') +
+  annotate("text", x = 2, y = 0.98, 
+           label = expression( "95%" ~ sigma), vjust = -0.5) +
+  theme_minimal() +
+  xlab( 'Principal Component Number' ) +
+  ylab( 'Cumulative Explained Variance' ) +
+  ggtitle( 'Cumulative Explained Variance' )
+
+grid.arrange( p1, p2, ncol=2)
+```
+
+From the skree plot, we can see a very sharp drop off in the proportion of explained variance. Principal Components greater than 12 account for less than 1% of the dataset's variance. The first 12 components only account for a cumulative variance of `r round( df_pca$Cumulative.Proportion[12], 2)`, therefore it takes the combined contribution of many more components (`r comp95` components) to explain 95% of the variance of each pixel for the original images.  
+
+Visualizing several PCA components
+
+```{r fig6, fig.height = 6, fig.width = 9, fig.align = "center"}
+par(mfrow = c(2,3))
+
+show_digit(sumTrain$rotation[,1])
+title(bquote('PC1: ' ~ .(round( df_pca$Proportion.of.Variance[1],3)*100) ~ '% explained variance'))
+
+show_digit(sumTrain$rotation[,2])
+title(bquote('PC2: ' ~ .(round( df_pca$Proportion.of.Variance[2],3)*100) ~ '% explained variance'))
+
+show_digit(sumTrain$rotation[,3])
+title(bquote('PC3: ' ~ .(round( df_pca$Proportion.of.Variance[3],4)*100) ~ '% explained variance'))
+
+show_digit(sumTrain$rotation[,4])
+title(bquote('PC4: ' ~ .(round( df_pca$Proportion.of.Variance[4],4)*100) ~ '% explained variance'))
+
+show_digit(sumTrain$rotation[,392])
+title(bquote('PC392: ' ~ .(round( df_pca$Proportion.of.Variance[392],6)*100) ~ '% explained variance'))
+
+show_digit(sumTrain$rotation[,784])
+title(bquote('PC784: ~' ~ .(df_pca$Proportion.of.Variance[784]) ~ '% explained variance'))
+
+par(mfrow = c(1,1))
+```
+
+PCA returns a components for every dimension of the data in descending order of the amount of variance accounted for. The figure above shows the the first 4 components, component PC392 (middle), and the last component PC784. As already depicted in the Skree and Cumulative Explained Variance plots, the first four components explain `r round( df_pca$Cumulative.Proportion[4], 2)`% variance from PC1: 22.1% $\rightarrow$ PC2: 5.1% variance. We can see clearly from the visualization of the components that the first several PCs are clearly discriminating between clothing classifications. For instance, PC1 distinguishes between T-shirt/top & Pullover (dark/high values) and shoe categories (light/low values). On the other hand, PC2 appears to distinguish Trousers from shoe categories. The representation become less clear as the explained variance decreases. For instance, PC392 and PC784 only explain 0.01% and 0.001% variance respectively and it is not clear from the visualization just what information these components represent.  
+
+PC1 and PC2 account for roughly half (`r round( df_pca$Cumulative.Proportion[2], 2)`) of the train dataset's variance. We can visualize the projections of the train data onto the features space of these two components:  
+
+```{r}
+label = c('T-shirt/top', 'Trouser', 'Pullover', 'Dress', 'Coat', 'Sandal', 'Shirt', 'Sneaker', 'Bag', 'Ankle boot')
+
+train_pca_x <- data.frame(train.pca$x) %>%
+  select( c( 'PC1', 'PC2' ) ) %>%
+  mutate( labels = train_y,
+          labels_text = case_when( labels == 0 ~ 'T-shirt/top',
+                                   labels == 1 ~ 'Trouser',
+                                   labels == 2 ~ 'Pullover',
+                                   labels == 3 ~ 'Dress',
+                                   labels == 4 ~ 'Coat',
+                                   labels == 5 ~ 'Sandal',
+                                   labels == 6 ~ 'Shirt',
+                                   labels == 7 ~ 'Sneaker',
+                                   labels == 8 ~ 'Bag',
+                                   labels == 9 ~ 'Ankle boot') )
+cat_mean <- train_pca_x %>%
+  group_by( labels_text ) %>%
+  summarise( PC1_mean = mean( PC1 ),
+             PC2_mean = mean( PC2 ) )
+cat_mean
+```
+
+```{r fig7, fig.height = 8, fig.width = 10, fig.align = "center"}
+ggplot( train_pca_x, aes( x = PC1, y = PC2, color = labels_text)) +
+  geom_point( size = 1 ) +
+  theme_classic() +
+  geom_text(data=cat_mean, aes( x = PC1_mean, y = PC2_mean, label = labels_text),
+            color = 'black', size = 5 ) +
+  guides(colour = guide_legend(override.aes = list(size=10))) +
+  ggtitle( 'Data Projections onto PC1 & PC2 feature space' )
+```
+
+The figure above shows the representations of the `train` images in the feature space of the first 2 dimensions. Each clothing item category is represented by a different color. For clarity, a text label (in black) which corresponds to the categorical mean values of PC1 & PC2 has been added. We can see that there is noticeable separation across the categories. Additionally, we see some clustering of category means that meets expectations. For example, the shoe categories (Sandal, Sneaker and Ankle Boot) group together towards the lower left hand corner of the figure. Clothing items that could all be described as tops with sleeves ( Pullover, Coat, Shirt & T-shirt/top) group together in the middle of the distribution. Trousers, on the other hand, have a noticeable distance from tops with sleeves but ar contiguous with the dress category which shares roughly vertical rectangular profile.  
+
+Let us now visualize the image representations in the 2 dimensional PC1 and PC2 feature space: 
+
+```{r fig8, fig.height = 5, fig.width = 10, fig.align = "center"}
+trunc <- train.pca$x[,1:2] %*% t(train.pca$rotation[,1:2])
+
+#and add the center (and re-scale) back to data
+if(train.pca$scale != FALSE){
+	trunc <- scale(trunc, center = FALSE , scale=1/train.pca$scale)
+}
+if(train.pca$center != FALSE){
+    trunc <- scale(trunc, center = -1 * train.pca$center, scale=FALSE)
+}
+
+npics = 6
+mpics = 2
+par(mfrow=c(mpics, npics), mar=c(0, 0.2, 1, 0.2))
+for (i in 1:(npics*mpics)) {
+  show_digit(train[i, ])
+  title(bquote('original image #' ~ .(i) ))
+  show_digit(trunc[i, ])
+  title(bquote('compressed image #' ~ .(i) ))
+}
+```
+
+The figures above show the original images next to the projections into the compressed PC1+PC2 feature space. With only 2 components, we can see that the representation is not completely lost for all images. For instance, The images for pullovers (Image #6 and #8) are both recognizable as pullovers. However, the representations of Dress images are confounded by PC2 which is tuned to discriminate Trousers. Additionally, many of the representations of shoes are quite ambiguous.  
+
+Clearly more features are necessary to represent the variance in the data.  
+
+Here we find the representation onto the first `r comp95` components which were shown earlier to account for 95% of the variance in the image data:
+
+```{r fig9, fig.height = 5, fig.width = 10, fig.align = "center"}
+trunc <- train.pca$x[,1:comp95] %*% t(train.pca$rotation[,1:comp95])
+
+#and add the center (and re-scale) back to data
+if(train.pca$scale != FALSE){
+	trunc <- scale(trunc, center = FALSE , scale=1/train.pca$scale)
+}
+if(train.pca$center != FALSE){
+    trunc <- scale(trunc, center = -1 * train.pca$center, scale=FALSE)
+}
+
+npics = 6
+mpics = 2
+par(mfrow=c(mpics, npics), mar=c(0, 0.2, 1, 0.2))
+for (i in 1:(npics*mpics)) {
+  show_digit(train[i, ])
+  title(bquote('original image #' ~ .(i) ))
+  show_digit(trunc[i, ])
+  title(bquote('compressed image #' ~ .(i) ))
+}
+```
+
+Truncating the data to `r comp95` components does result in information loss, however, as we can see from the visualizations above, the images retain much of the detail from the original images while using a feature space `r round(comp95/784*100,2)`% the size of the original.
+
+## PCA Performance Comparison
+
+We used PCA to reduce the dimensionality of the Fashion MNIST `train` dataset. Here we will evaluate the speed and performance of an SVM model fit to either the original 784 feature image set or the PCA compressed `r comp95` dataset. The compressed dataset will undoubtedly train faster, but at what cost to prediction accuracy?
+
+### Train, Time & Evaluate SVM fit on original images
+
+The following code was used to fit a Support Vector Machine classifier to a subset (10000 images) of the original data. To facilitate the process, the model has been previously fit, saved and will be loaded for further analysis
+```{r eval=FALSE}
+# use a subset of train to expedite SVM
+sub_train <- train[1:10000,] %>%
+  mutate(labels = train_y[1:10000] )
+
+start_time <- Sys.time()
+svm_mdl <- train(labels~.,data=sub_train,
+                 method="svmRadial",
+                 trControl=trainControl(method="cv", number=3),
+                 tuneGrid=data.frame(sigma = 0.01, C = 3.5),
+                 verbose=TRUE)
+end_time <- Sys.time()
+
+print(svm_mdl)
+run_time <- start_time - end_time
+paste( 'run time: ', run_time )
+```
+
+runtime using the original feature space was found to be: 11:10  
+Here we load the previously saved model
+
+```{r}
+svm_mdl_full <- load("svm_mdl_full")
+print( get(svm_mdl_full) )
+```
+
+### Train, Time & Evaluate SVM fit on compressed images
+
+The following code was used to fit a Support Vector Machine classifier to a subset (10000 images) of the PCA compressed data features. Again, to facilitate the process, the model has been previously fit, saved and will be loaded for further analysis
+
+```{r eval=FALSE}
+# use a subset of train to expedite SVM
+sub_train_trunc <- data.frame( trunc[1:10000,] ) %>%
+  mutate(labels = train_y[1:10000] )
+
+start_time2 <- Sys.time()
+svm_mdl <- train(labels~.,data=sub_train_trunc,
+                 method="svmRadial",
+                 trControl=trainControl(method="cv", number=3),
+                 tuneGrid=data.frame(sigma = 0.01, C = 3.5),
+                 verbose=TRUE)
+end_time2 <- Sys.time()
+
+print(svm_mdl)
+run_time2 <- start_time2 - end_time2
+paste( 'run time: ', run_time2 )
+```
+
+
+runtime using the original feature space was found to be: 9:54
+
+```{r}
+svm_mdl_trunc <- load("svm_mdl_trunc")
+print( get(svm_mdl_trunc) )
+```
+
+
+### Evaluate SVM performance on `test` data
+
+We can now evaluate the performance of the models trained on the full feature space and the PCA-compressed feature space on the `test` data. First, we need to preprocess the `test` data for PCA in the same way that the `train` data was processed. 
+
+```{r}
+test.pca <- prcomp( test )
+test_trunc <- test.pca$x[,1:comp95] %*% t(test.pca$rotation[,1:comp95])
+#and add the center (and re-scale) back to data
+if(test.pca$scale != FALSE){
+	test_trunc <- scale(test_trunc, center = FALSE , scale=1/test.pca$scale)
+}
+if(test.pca$center != FALSE){
+  test_trunc <- scale(test_trunc, center = -1 * test.pca$center, scale=FALSE)
+}
+```
+
+```{r}
+pred <- predict( get(svm_mdl_full) , test)
+#test$prediction <- pred
+pred_trunc <- predict( get(svm_mdl_trunc), test_trunc)
+#test_trunc$prediction <- pred_trunc
+```
+
+Confusion Matrix for SVM Classification with the full feature space.
+
+```{r}
+tbl_full <- table(Label = test_y[1:10000], Prediction = pred)
+print(tbl_full)
+cat("The model is ", 100 * sum(diag(tbl_full)) / nrow(test), "% accurate.", sep = "")
+```
+
+Confusion Matrix for SVM Classification with the PCA compressed feature space.
+
+```{r}
+tbl_trunc <- table(Label = test_y[1:10000], Prediction = pred_trunc)
+print(tbl_trunc)
+cat("The model is ", 100 * sum(diag(tbl_trunc)) / nrow(test), "% accurate.", sep = "")
+```
+
+## Summary
+
+PCA is a dimensionality reduction method that can be applied to high dimensional datasets. PCA reduces the number of features while preserving as much variance from the data as possible. Here we used PCA to reduce the number of features of the Fashion MNIST dataset from 784 to `r comp95`. We showed through a series of visualizations that transforming the images to the reduced feature space does so with an noticeable loss to image quality, however the gist of the images is still present. Furthermore, we used SVM model fits to evaluate performance with the reduced dimension PCA version of Fashion MNIST. A radial SVM classifier was trained on a subset of 10,000 images for both the full-featured set and the PCA-compressed set. The PCA-compressed model trained approximately 1 minute and 20seconds faster than the full-featured data. En face, this does difference does not sound appreciable. However, considering that training time for SVM scales quadratically with dataset size, one would expect to see noticeable improvements in performance had the entire `train` set been used for model training. Furthermore, we evaluated the classification accuracy and found that the PCA-compressed SVM model had a higher prediction accuracy on the test data. In conclusion, use of the PCA compressed dataset would be beneficial in down-stream modeling analysis. As a detraction, additional steps would be necessary to transform the data between full and compressed feature spaces to facilitate model interpretation.
+
+
+
+## KNN: Raw vs PCA Compression 
+
+K-nearest neighbors (kNN) is a non-parametric technique that can be used for image classification.  It's a very simple technique, wherin new samples are classified as the most typical class among the k-nearest labeled examples it was 'trained' on.  That being said, kNN doesn't actually train: it stores the data and referred back to it when making classifications.  The Caret package was used to create this model, and although it may appear like it's fitting a model, I think what it's actually doing here is storing all the training data, then trying out different k values, one of which it will choose to use when 'predict' is called.  Even if it's not semantically well implemented, it's still very useful for finding a good 'k' value.
+
+
+Here, we 'train' two models: one for evaluation on the base dataset, and one for the PCA compressed data.  Let's see if there are any differences.  These models will also be 'trained' on a subset of 10000 samples, both to reuce training times and to compare better with the SVM models.  
+
+
+### KNN, no PCA
+
+Below, is the non-PCA kNN model. This one whittles down some of the data, choosing only variables (pixels) which vary significantly between images.  E.g., a pixel in the corner that has the same value throughout most images will not be used in the model.  
+
+```{r}
+#data processing
+library(plyr)
+
+#set's reference data size, and identifies near zero variance variables (pixels)
+#If loading a model, make train_n  the same as used with the loaded model (default 10,000)
+train_n <- 10000
+knn.df <- train[1:train_n,]
+nzv_pix <- nearZeroVar(knn.df, freqCut = 90)
+
+#This runs but it will take over an hour.  Takes a long time to find the right k.
+#We'll only run this if the file doesn't aleray exist.
+if (file.exists("knn_fit.rds") == FALSE) {
+  
+  
+  
+
+  
+  knn.df <- knn.df[,-nzv_pix] ## Remove  near zero variance columns.  Won't work otherwise
+  
+  knn.df$labels <- train_y[1:train_n] #append the labels to the dataset
+  
+  
+  grid <- expand.grid(k = seq(1,11,2))   #The hyper-parameters to try out (k values)
+  
+  knn.df <- predict(preProcess(knn.df, method = c("center","scale")), knn.df) #center and scale (very important for knn)
+  
+  knn.fit <- caret::train(labels ~. ,    #Trains the model
+                     data = knn.df,
+                     method = "knn",
+                     trControl=trainControl(method="repeatedcv", number=5, repeats=3),  #cross-valiation
+                     tuneGrid=grid)
+
+  
+} else {
+    
+  knn.fit <- readRDS("knn_fit.rds")
+  
+  }
+
+
+knn.fit 
+
+
+```
+
+The best value of k for this dataset apears to be 5; This includes some testing not included here.  Below is a plot of cross-validation accuracies across several values of k.
+
+```{r}
+#Validation accuracy for different values of k 
+plot(knn.fit)
+```
+
+While the accuracies were fairly similar, we can see that a value of 5 for k performed the best.  This plot does not include seperate trials that occured previously.
+
+Let's take a look at how the model performs with a k of 5.
+
+```{r}
+#saveRDS(knn.fit, file = "knn_fit.rds")
+
+test_n <- 10000  #test set size
+
+#Same pixels as the training set
+test.processed <- predict(preProcess(test[1:test_n,-nzv_pix], method = c("center","scale")), test[1:test_n,-nzv_pix]) 
+
+
+knn.preictions <- predict(knn.fit, test.processed) #Make predictions
+
+#Confusion matrix and accuracy
+tbl_full <- table(Label = test_y[1:test_n], Prediction = knn.preictions)
+print(tbl_full)
+cat("The model is ", 100 * sum(diag(tbl_full)) / test_n, "% accurate.", sep = "")
+
+
+
+```
+
+The overall accuracy for this model was 81.33% (95% CI: 80.57 - 82.09%).  Above is a confusion matrix, with prediction as columns and true labels as rows.  It has an easier time detecting some labels than others.  For example, it correctly classifies most of the sneakers (label 7), bags (8), ankle-boots (9), and trousers (1).  However, it has a much harder time classifying pullovers (2), coats (4), sandals (5), and shirts (6).  Shirts in particular fared poorly, with only about half correctly classified; t-shirts/tops (0), pullovers (2), and coats (4) were also often missclassified as shirts, which makes sense (they are very similar).  
+
+### KNN with PCA
+
+Now we'll try kNN with the PCA compressed data, and see if it has any effect on performance when compared to the previous model.
+
+```{r}
+
+if (file.exists("knn_pca_fit.rds") == FALSE) {
+
+grid <- expand.grid(k = seq(1,11,2))
+
+knn.pca.fit <- caret::train(labels ~. ,
+                   data = sub_train_trunc[1:10000,],
+                   method = "knn",
+                   trControl=trainControl(method="repeatedcv", number=5, repeats=3),
+                   tuneGrid=grid)
+
+}  else  {
+  
+  knn.pca.fit <- readRDS("knn_pca_fit.rds")
+  
+  
+}
+knn.pca.fit 
+```
+
+When 'fit' on a sample of 10,000 samples, a k value of 7 appears to perform best during cross-validation.  The cross-validation accuracies across k values of 1-11 were similar; below, this is plotted. 
+
+
+```{r}
+plot(knn.pca.fit)
+```
+
+The changes in accuracy avross different values of k (above) aren't terribly drastic.  K values of 5-7 performed best across all tested values (not all included above).  
+
+Let's try it out on the test set now.
+
+```{r}
+#saveRDS(knn.pca.fit, file = "knn_pca_fit.rds")
+test_n <- 10000
+
+
+knn.pca.preictions <- predict(knn.pca.fit, test_trunc[1:test_n,])
+
+#Confusion matrix
+tbl_full <- table(Label = test_y[1:test_n], Prediction = knn.pca.preictions)
+print(tbl_full)
+cat("The model is ", 100 * sum(diag(tbl_full)) / test_n, "% accurate.", sep = "")
+```
+
+The overall accuracy of this model was 82.36% (95% CI: 81.61 - 83.11%).  It performed very similarly to the previous model which used a non-pca compressed dataset.  We can see similar patterns in the confusion matrix:most of the sneakers (label 7), bags (8), ankle-boots (9), and trousers (1) where correctly classified.  Also, it had a harder time classifying pullovers (2), coats (4), sandals (5), and shirts (6).  We also see similar missclasifications to the other set, where shirt classification is poo, and t-shirts/tops (0), pullovers (2), and coats (4) were often missclassified as shirts.
+
+Similar to wat we saw with the SVM models, the PCA compressed kNN model actually performs slightly better than the regular kNN model (82.35% vs 81.23% overall accuracy; a significant difference at $\alpha = 0.05$).  It's unclear why this happens.  One could theorize that perhaps the removing some of the percision in the data may make for more robust models that resist over-fitting. It could also be seperating the data a bit better, which both SVM and kNN would benefit from significanly.
+
+
+
+# Feature Engineering Experementation
+
+```{r lib, message=FALSE, warning=FALSE}
+#To avoid potential issues, I'm not merging this with the prior library chunk
+detach("package:plyr", unload=TRUE)
+library(stringr)
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(gridExtra)
+library(caret)
+library(conflicted)
+library(factoextra)
+library(purrr)
+library(scales)
+
+# conflict_scout()
+conflict_prefer('filter', 'dplyr')
+```
+
+
+
+## Import
+
+```{r import}
+# CSV FILES DOWNLOADED FROM 
+# https://www.kaggle.com/zalando-research/fashionmnist
+
+file_path <- archive
+
+train_fn <- 'fashion-mnist_train.csv'
+test_fn <- 'fashion-mnist_test.csv'
+
+train_path <- str_c(file_path, train_fn)
+test_path <- str_c(file_path, test_fn)
+
+train <- read.csv(train_path)
+test <- read.csv(test_path)
+
+train$label <- factor(train$label, labels = c('T-shirt/top',
+                                              'Trouser',
+                                              'Pullover',
+                                              'Dress',
+                                              'Coat', 
+                                              'Sandal',
+                                              'Shirt',
+                                              'Sneaker',
+                                              'Bag',
+                                              'Ankle boot'))
+
+test$label <- factor(test$label, labels = c('T-shirt/top',
+                                            'Trouser',
+                                            'Pullover',
+                                            'Dress',
+                                            'Coat', 
+                                            'Sandal',
+                                            'Shirt',
+                                            'Sneaker',
+                                            'Bag',
+                                            'Ankle boot'))
+```
+
+We imported the data in csv format, downloaded from kaggle. Each observation represents a picture and each variable is one pixel within each picture. The labels have been converted to factors.
+
+
+```{r functions}
+### These functions are used to manipulate the structure of the raw data tables
+
+# convert number to 6 digit string
+num_to_str_5 <- function(num) {
+  
+  str <- as.character(num)
+  str <- paste0('0000', str)
+  str <- str_sub(str, -5, -1)
+  
+  return(str)
+}
+
+
+# convert dataframe to grid with x and y coordinates
+as_grid_vars <- function(data, row_names = NA) {
+  
+  # dataframe in parameter
+  df <- data
+  
+  # store label
+  label <- df$label
+  
+  # remove label
+  df <- df %>%
+    select(-label)
+  
+  # change field names to seq 1 to 784
+  colnames(df) <- seq_len(28*28)
+  
+  # add back label
+  df$label <- label
+  
+  # add row index/name
+  if (is.na(row_names)) {
+    
+    df$row <- seq_len(nrow(df)) %>%
+      num_to_str_5()
+    
+  } else {
+    
+    df$row <- row_names %>%
+      num_to_str_5()
+    
+  }
+  
+  # gather fields into rows
+  df2 <- gather(df, var, val, -row, -label)
+  
+  # convert col name variable into integer
+  df2$var <- as.integer(df2$var)
+  
+  # calculate grid
+  df2$y <- ceiling(df2$var / 28)
+  df2$x <- df2$var - 28 * (df2$y - 1)
+  
+  # reverse y
+  df2$y <- 29 - df2$y
+
+  # sort
+  df2 <- df2 %>%
+    arrange(row, x, y) %>%
+    select(label, row, pixel = var, val, x, y)
+  
+  return(df2)
+    
+}
+
+
+# plot based on row index
+plot_row <- function(row, data = train) {
+  
+  # select row from dataframe
+  df <- data[row, ]
+  
+  # convert to grid format dataframe
+  df2 <- as_grid_vars(df, row)
+  
+  df2$id <- paste0(df2$row, ': ', df2$label)
+  
+  # plot
+  p <- ggplot(df2, aes(x = x, y = y, fill = val)) +
+    geom_tile() +
+    scale_fill_gradient(low = "white", high = "black", na.value = NA) +
+    theme_bw() +
+    theme(aspect.ratio = 1,
+          legend.position = 'none') +
+    scale_x_continuous(breaks = seq(0,28,4)) +
+    scale_y_continuous(breaks = seq(0,28,4)) +
+    labs(x = element_blank(),
+         y = element_blank()) +
+    facet_wrap(~id)
+  
+  return(p)
+}
+
+
+# create vector of pixels applying to a specific column or x value
+col_index_list <- function(x) {
+  
+  cols <- c()
+  
+  for (i in 0:27) {
+    
+    xx <- x + (i * 28)
+    cols <- append(cols, xx)
+  
+  }
+  
+  return(cols)
+  
+}
+
+# create vector of pixels applying to a specific row or y value
+row_index_list <- function(y) {
+  
+  y_start <- (28 - y) * 28 + 1
+  y_end <- y_start + 27
+  rows <- seq(y_start, y_end) 
+  
+  return(rows)
+  
+}
+
+```
+
+## EDA
+
+### Long Table
+
+```{r eda, fig.height = 8}
+# use a smaller training set, 10% or 6k rows
+set.seed(101)
+tenth <- createDataPartition(train$label, p = 0.1, list = F)
+train2 <- train[tenth,]
+
+# convert to grid format
+train2_grid <- as_grid_vars(train2)
+
+head(train2_grid)
+```
+
+Using a function, we have gathered each of the pixel variables into a long format table and have converted each pixel to x and y coordinates, with the origin point in the lower left. Each row has also been labeled as a 5 digit number in string format. This grid location conversion was done to facilitate the feature engineering done below, allowing us to see each picture using the commonly known two dimensional chart, with x on the horizontal axis and y on the vertical axis. Additionally, this makes plotting significantly easier.
+
+For the charts below, we're using a sample of 10% or 6,000 observations to explore and visualize what the data contains.
+
+### Plot 4x4 Observations
+
+```{r}
+# plot random 4x4
+plot_row(seq(101,116,1))
+
+# plot another random 4x4
+plot_row(seq(201,216,1))
+
+```
+
+Above, we can see 16 observations from rows 101 - 116 of the sample set. At first glance, there are some clear differences between some classes. Shoes, shirts, and bags are clearly different. The differences between ankle boots, sneakers, and sandals vary by details rather than overall shape. Also, all types of tops, including dresses, have very similar shapes. It's very difficult to tell the differences between shirts, pullovers, and coats.
+
+### Most Used Pixels
+
+```{r}
+# see which pixels are used the most
+train2_grid %>%
+  group_by(x, y) %>%
+  summarize(not_white = sum(ifelse(val > 0, 1, 0)),
+            .groups = 'drop') %>%
+  ggplot(aes(x = x, y = y, fill = not_white)) +
+  geom_tile() +
+  theme(aspect.ratio = 1)
+```
+
+The above chart above is a heat map of the pixels that are used in the sample set, counting only any non-white pixel. Overall, we can see that the center is the most likely to have some color. Stepping back, we can see the outline of a shirt, a shoe, and the space between trousers. For modeling purposes, we can see that the corners aren't used at all, so its likely safe to leave those points out.
+
+### Most Used Pixels by Label
+
+```{r}
+# see which pixels are used the most by label
+train2_grid %>%
+  group_by(x, y, label) %>%
+  summarize(not_white = sum(ifelse(val > 0, 1, 0)),
+            .groups = 'drop') %>%
+  ggplot(aes(x = x, y = y, fill = not_white)) +
+  geom_tile() +
+  scale_x_continuous(breaks = seq(0,28,4)) +
+  scale_y_continuous(breaks = seq(0,28,4)) +
+  theme(aspect.ratio = 1) +
+  facet_wrap(~label)
+
+```
+
+The visualization above is similar to the previous chart, showing most used pixels for each label. Here we are attempting to generalize the shapes and pixels used by each of the different fashion items. Looking at the shoes, we can see that there are full horizontal rows that are completely white, which is also common to bags. As we look at the differences and similarities of each of the classes, the shape of different sections allows us to classify the labels in our minds, which we'll try to replicate with feature engineering below. If we can create new variables to try and capture the differences in shape, we can see if those variables will be useful in contributing to the accuracy of the models we train.
+
+## Feature Engineering
+
+One of the methods that can be used for dimensionality reduction is feature engineering. Instead of processing $28^2$ or 784 individual variables, we will use feature engineering to process the data into fewer variables that attempt to summarize information within the original dataset. If resources were unlimited, we could use both the original pixel variables along with the features below. Since we're using consumer grade personal computers, we'll train the models in the next step using the calculated features in this section. Below is a list of the calculated variables:
+
+- % of pixels that are different shades of grey -- 0, 50, 87, 167, 209, 255
+  - white: 0
+  - grey1: 1-46
+  - grey2: 47-93 
+  - grey3: 94-168
+  - grey4: 169-205    
+  - black: 206-255
+- % of non-white pixels in each of the 28 rows
+- % of non-white pixels in each of the 28 columns
+- % of rows that are completely white
+- % of columns that are completely white
+- 10 custom blocks that are subsections of the grids, showing percent non-white as well as percent light grey (1 - 122).
+
+The features listed were determined by visually analyzing the faceted chart in the EDA section that showed the most used pixels for each of the types of fashion item. 
+
+```{r feature_engineering}
+
+# # get the pixels for each coordinate
+# grid_ref <- train2_grid %>%
+#   filter(row == '00001') %>%
+#   select(x, y, pixel)
+# 
+# # list the pixels for column 1 or x = 1
+# col1_check <- grid_ref %>%
+#   filter(x == 1) %>%
+#   arrange(pixel)
+# 
+# # list the pixels for row 1 or y = 1
+# row1_check <- grid_ref %>%
+#   filter(y == 1) %>%
+#   arrange(pixel)
+
+# return pixel based on coordinates
+find_pixel <- function(x, y) {
+  
+  pixel <- (28 - y) * 28 + x
+  
+}
+
+# list pixels within box using lower left and top right coordinates
+box_pixel_list <- function(xstart, ystart, xend, yend) {
+  
+  # initialize empty vector
+  pixels <- c()
+  
+  # loop through entire range
+  for (y in ystart:yend) {
+    for (x in xstart:xend) {
+      pixels <- append(pixels, find_pixel(x, y))
+    }
+  }
+  
+  return(pixels)
+  
+}
+
+# ptest <- box_pixel_list(16,6,22,10)
+
+
+
+
+# # for function building purposes only
+# data <- train[1:10,]
+# grid_check <- as_grid_vars(data)
+
+# convert a dataframe into a new dataframe with feature variables only
+calculate_features <- function(data) {
+
+  # initialize dataframe
+  df <- data
+  
+  # remove label if it exists in first column
+  if (is.factor(data[,1])) {
+    labels <- df$label
+    df <- df %>%
+      select(-label)
+  }
+  
+  # count columns = 28 * 28 = 784
+  col_count <- ncol(df)
+  
+  
+  ### pct different shades of grey
+  temp_df <- df
+  
+  # percent white 
+  x <- df == 0
+  x[x == T] <- 1
+  temp_df$pct_white <- rowSums(x) / 784
+  
+  # percent grey1
+  x <- df > 0 & df <= 46
+  x[x == T] <- 1
+  temp_df$pct_grey1 <- rowSums(x) / 784
+  
+  # percent grey2
+  x <- df > 46 & df <= 93
+  x[x == T] <- 1
+  temp_df$pct_grey2 <- rowSums(x) / 784
+  
+  # percent grey3
+  x <- df > 93 & df <= 168
+  x[x == T] <- 1
+  temp_df$pct_grey3 <- rowSums(x) / 784
+  
+  # percent grey4
+  x <- df > 168 & df <= 205 
+  x[x == T] <- 1
+  temp_df$pct_grey4 <- rowSums(x) / 784
+  
+  # percent black
+  x <- df > 205 
+  x[x == T] <- 1
+  temp_df$pct_black <- rowSums(x) / 784
+  
+  # keep shades only
+  y_start <- col_count + 1
+  y_end <- ncol(temp_df)
+  shades <- temp_df[,y_start:y_end]
+  
+  rm(temp_df)
+  
+  ### calculate non-white pixels for row and column strips
+  
+  # convert non zeros to 1
+  bkup_df <- df
+  df[df > 0] <- 1
+  
+  # calculate column strips as % non-white
+  df$pw_x1 <- df[,row_index_list(1)] %>% rowSums() / 28
+  df$pw_x2 <- df[,row_index_list(2)] %>% rowSums() / 28
+  df$pw_x3 <- df[,row_index_list(3)] %>% rowSums() / 28
+  df$pw_x4 <- df[,row_index_list(4)] %>% rowSums() / 28
+  df$pw_x5 <- df[,row_index_list(5)] %>% rowSums() / 28
+  df$pw_x6 <- df[,row_index_list(6)] %>% rowSums() / 28
+  df$pw_x7 <- df[,row_index_list(7)] %>% rowSums() / 28
+  df$pw_x8 <- df[,row_index_list(8)] %>% rowSums() / 28
+  df$pw_x9 <- df[,row_index_list(9)] %>% rowSums() / 28
+  df$pw_x10 <- df[,row_index_list(10)] %>% rowSums() / 28
+  df$pw_x11 <- df[,row_index_list(11)] %>% rowSums() / 28
+  df$pw_x12 <- df[,row_index_list(12)] %>% rowSums() / 28
+  df$pw_x13 <- df[,row_index_list(13)] %>% rowSums() / 28
+  df$pw_x14 <- df[,row_index_list(14)] %>% rowSums() / 28
+  df$pw_x15 <- df[,row_index_list(15)] %>% rowSums() / 28
+  df$pw_x16 <- df[,row_index_list(16)] %>% rowSums() / 28
+  df$pw_x17 <- df[,row_index_list(17)] %>% rowSums() / 28
+  df$pw_x18 <- df[,row_index_list(18)] %>% rowSums() / 28
+  df$pw_x19 <- df[,row_index_list(19)] %>% rowSums() / 28
+  df$pw_x20 <- df[,row_index_list(20)] %>% rowSums() / 28
+  df$pw_x21 <- df[,row_index_list(21)] %>% rowSums() / 28
+  df$pw_x22 <- df[,row_index_list(22)] %>% rowSums() / 28
+  df$pw_x23 <- df[,row_index_list(23)] %>% rowSums() / 28
+  df$pw_x24 <- df[,row_index_list(24)] %>% rowSums() / 28
+  df$pw_x25 <- df[,row_index_list(25)] %>% rowSums() / 28
+  df$pw_x26 <- df[,row_index_list(26)] %>% rowSums() / 28
+  df$pw_x27 <- df[,row_index_list(27)] %>% rowSums() / 28
+  df$pw_x28 <- df[,row_index_list(28)] %>% rowSums() / 28
+  
+  # calculate row strips as % non-white
+  df$pw_y1 <- df[,col_index_list(1)] %>% rowSums() / 28
+  df$pw_y2 <- df[,col_index_list(2)] %>% rowSums() / 28
+  df$pw_y3 <- df[,col_index_list(3)] %>% rowSums() / 28
+  df$pw_y4 <- df[,col_index_list(4)] %>% rowSums() / 28
+  df$pw_y5 <- df[,col_index_list(5)] %>% rowSums() / 28
+  df$pw_y6 <- df[,col_index_list(6)] %>% rowSums() / 28
+  df$pw_y7 <- df[,col_index_list(7)] %>% rowSums() / 28
+  df$pw_y8 <- df[,col_index_list(8)] %>% rowSums() / 28
+  df$pw_y9 <- df[,col_index_list(9)] %>% rowSums() / 28
+  df$pw_y10 <- df[,col_index_list(10)] %>% rowSums() / 28
+  df$pw_y11 <- df[,col_index_list(11)] %>% rowSums() / 28
+  df$pw_y12 <- df[,col_index_list(12)] %>% rowSums() / 28
+  df$pw_y13 <- df[,col_index_list(13)] %>% rowSums() / 28
+  df$pw_y14 <- df[,col_index_list(14)] %>% rowSums() / 28
+  df$pw_y15 <- df[,col_index_list(15)] %>% rowSums() / 28
+  df$pw_y16 <- df[,col_index_list(16)] %>% rowSums() / 28
+  df$pw_y17 <- df[,col_index_list(17)] %>% rowSums() / 28
+  df$pw_y18 <- df[,col_index_list(18)] %>% rowSums() / 28
+  df$pw_y19 <- df[,col_index_list(19)] %>% rowSums() / 28
+  df$pw_y20 <- df[,col_index_list(20)] %>% rowSums() / 28
+  df$pw_y21 <- df[,col_index_list(21)] %>% rowSums() / 28
+  df$pw_y22 <- df[,col_index_list(22)] %>% rowSums() / 28
+  df$pw_y23 <- df[,col_index_list(23)] %>% rowSums() / 28
+  df$pw_y24 <- df[,col_index_list(24)] %>% rowSums() / 28
+  df$pw_y25 <- df[,col_index_list(25)] %>% rowSums() / 28
+  df$pw_y26 <- df[,col_index_list(26)] %>% rowSums() / 28
+  df$pw_y27 <- df[,col_index_list(27)] %>% rowSums() / 28
+  df$pw_y28 <- df[,col_index_list(28)] %>% rowSums() / 28
+
+  ### calculate pct of non-white pixels in select grids
+  ### also pct of lightly shaded colors in box
+  temp_df <- bkup_df > 0 & bkup_df <= 122
+  temp_df[temp_df == T] <- 1
+  
+  # custom grid 1, collar area, 12,26 : 18,28
+  pixel_list <- box_pixel_list(12, 26, 18, 28)
+  pixel_area <- length(pixel_list)
+  df$pw_collar <- df[,pixel_list] %>% rowSums() / pixel_area
+  df$plg_collar <- temp_df[,pixel_list] %>% rowSums() / pixel_area
+  
+  # custom grid 2, tshirt sleeve area
+  pixel_list <- box_pixel_list(2, 14, 12, 20)
+  pixel_area <- length(pixel_list)
+  df$pw_ts_sleeve <- df[,pixel_list] %>% rowSums() / pixel_area
+  df$plg_ts_sleeve <- temp_df[,pixel_list] %>% rowSums() / pixel_area
+  
+  # custom grid 3, trouser legs
+  pixel_list <- box_pixel_list(12, 4, 18, 20)
+  pixel_area <- length(pixel_list)
+  df$pw_trouser_legs <- df[,pixel_list] %>% rowSums() / pixel_area
+  df$plg_trouser_legs <- temp_df[,pixel_list] %>% rowSums() / pixel_area
+  
+  # custom grid 4, shoulder area
+  pixel_list <- box_pixel_list(2, 23, 10, 28)
+  pixel_area <- length(pixel_list)
+  df$pw_shoulder <- df[,pixel_list] %>% rowSums() / pixel_area
+  df$plg_shoulder <- temp_df[,pixel_list] %>% rowSums() / pixel_area
+  
+  # custom grid 5, sneaker top
+  pixel_list <- box_pixel_list(19, 17, 27, 25)
+  pixel_area <- length(pixel_list)
+  df$pw_sneaker_top <- df[,pixel_list] %>% rowSums() / pixel_area
+  df$plg_sneaker_top <- temp_df[,pixel_list] %>% rowSums() / pixel_area
+  
+  # custom grid 6, center box
+  pixel_list <- box_pixel_list(7, 7, 21, 21)
+  pixel_area <- length(pixel_list)
+  df$pw_center <- df[,pixel_list] %>% rowSums() / pixel_area
+  df$plg_center <- temp_df[,pixel_list] %>% rowSums() / pixel_area
+  
+  # custom grid 7, bag_handle
+  pixel_list <- box_pixel_list(10, 16, 20, 24)
+  pixel_area <- length(pixel_list)
+  df$pw_bag_handle <- df[,pixel_list] %>% rowSums() / pixel_area
+  df$plg_bag_handle <- temp_df[,pixel_list] %>% rowSums() / pixel_area
+  
+  # custom grid 8, footwear area
+  pixel_list <- box_pixel_list(1, 6, 28, 22)
+  pixel_area <- length(pixel_list)
+  df$pw_footwear <- df[,pixel_list] %>% rowSums() / pixel_area
+  df$plg_footwear <- temp_df[,pixel_list] %>% rowSums() / pixel_area
+  
+  # custom grid 9, sleeve
+  pixel_list <- box_pixel_list(4, 1, 10, 16)
+  pixel_area <- length(pixel_list)
+  df$pw_sleeve <- df[,pixel_list] %>% rowSums() / pixel_area
+  df$plg_sleeve <- temp_df[,pixel_list] %>% rowSums() / pixel_area
+  
+  # custom grid 10, heel
+  pixel_list <- box_pixel_list(16, 4, 24, 10)
+  pixel_area <- length(pixel_list)
+  df$pw_heel <- df[,pixel_list] %>% rowSums() / pixel_area
+  df$plg_heel <- temp_df[,pixel_list] %>% rowSums() / pixel_area
+  
+  ### exclude single pixel variables
+  
+  ystart <- col_count + 1
+  yend <- ncol(df)
+  
+  strips <- df[,ystart:yend]
+  rm(df, temp_df, bkup_df)
+  
+  ### calculate percent of non-white strips for rows and columsn
+  
+  # pct of non-white rows
+  temp_df <- strips[,1:28]
+  x <- temp_df == 1
+  x[x == T] <- 1
+  strips$pw_rows <- rowSums(x) / 28
+  
+  # pct of non-white cols
+  temp_df <- strips[,29:56]
+  x <- temp_df == 1
+  x[x == T] <- 1
+  strips$pw_cols <- rowSums(x) / 28
+  
+  rm(temp_df)
+  
+  ### combine all new variables
+  final <- bind_cols(shades, strips)
+  
+  # add back labels if exists
+  if (is.factor(data[,1])) {
+    final <- bind_cols(label = labels, final)
+  } 
+  
+  rm(shades, strips)
+  gc()
+  return(final)
+    
+}
+```
+
+
+## Supervised Models
+
+This section uses 10 fold cross validation to train the following models:
+
+- Random forest
+- Support vector machine using a radial kernel
+- KNN nearest neighbor
+- Multinomial logistic regression
+- Naive bayes
+
+The following models will be trained exclusively on the variables created in the earlier feature engineering section. Additionally, the training data will only use a fraction of the original training dataset in order to deal with the hardware limitations of personal computers. The training set used below is a stratified sample and accounts for 16.7% or 10,010 observations of the original training set.
+
+
+```{r training models}
+# create new dataframes using only feature engineering variables
+# train3 <- calculate_features(train2)
+test2 <- calculate_features(test)
+
+# use a new training set, about 10k rows
+set.seed(101)
+trainIndex <- createDataPartition(train$label, p = 0.167, list = F)
+train3 <- train[trainIndex,] %>%
+  calculate_features()
+
+
+# 10 fold cross validation
+ctrl <- trainControl(method = 'cv', number = 10)
+
+
+# random forest
+
+if (file.exists("rf.rds") == FALSE){
+  
+  mark_0 <- Sys.time()
+    
+  grid <-  expand.grid(.mtry = sqrt(ncol(train3)))  
+  rf <- train(label ~ .,
+              data = train3,
+              method = 'rf',
+              tuneGrid = grid,
+              trControl = ctrl
+              )
+  
+  saveRDS(rf, file = "rf.rds")
+  
+  
+  mark_1 <- Sys.time()
+  
+} else {
+  
+  rf <- readRDS("rf.rds")
+  
+}
+
+  # svm radial 
+
+if (file.exists("svm.rds") == FALSE){
+
+  svm <- train(label ~ .,
+               data = train3,
+               method = 'svmRadial',
+               preProc = c('center', 'scale'),
+               tuneLength = 8,
+               trControl = trainControl(method = 'cv')
+               )
+  
+  saveRDS(svm, file = "svm.rds")
+  
+  mark_2 <- Sys.time()
+  
+} else {
+  
+  svm <- readRDS("svm.rds")
+  
+}
+
+  # knn classifier
+
+if (file.exists("knn.rds") == FALSE){
+
+  knn <- train(label ~ .,
+               data = train3,
+               method = "knn",
+               preProc = c("center", "scale"),
+               tuneLength = 10,
+               trControl = ctrl
+               )
+  
+  saveRDS(knn, file = "knn.rds")
+  
+  mark_3 <- Sys.time()
+  
+} else {
+  
+  knn <- readRDS("knn.rds")
+  
+}
+
+  # multinomial regression
+
+if (file.exists("multinom.rds") == FALSE){
+
+  multinom <- train(label ~ .,
+                    data = train3,
+                    method = 'multinom',
+                    tuneLength = 8,
+                    trControl = ctrl
+                    )
+  
+  saveRDS(multinom, file = "multinom.rds")
+  
+  mark_4 <- Sys.time()
+  
+}  else {
+  
+  multinom <- readRDS("multinom.rds")
+  
+}
+
+  # naive bayes
+
+if (file.exists("nb.rds") == FALSE){
+
+  nb <- train(label ~ .,
+              data = train3,
+              method = 'naive_bayes',
+              tuneLength = 8,
+              trControl = ctrl
+              )
+  
+  saveRDS(nb, file = "nb.rds")
+  
+  mark_5 <- Sys.time()
+  
+} else {
+  
+  nb <- readRDS("nb.rds")
+  
+}
+```
+
+### Model Training Durations
+
+```{r training duration}
+
+if (file.exists("train_durs.Rda") == FALSE) {
+  
+  # calculate durations
+  rf_dur <- difftime(mark_1, mark_0, units = 'mins') %>% round(1)
+  svm_dur <- difftime(mark_2, mark_1, units = 'mins') %>% round(1)
+  knn_dur <- difftime(mark_3, mark_2, units = 'mins') %>% round(1)
+  mn_dur <- difftime(mark_4, mark_3, units = 'mins') %>% round(1)
+  nb_dur <- difftime(mark_5, mark_4, units = 'mins') %>% round(1)
+  
+  # show all training durations
+  train_durs.df <- data.frame(
+    model_type = c('Random Forest', 'SVM Radial', 'KNN', 'Multinomial Logisitic Regression', 'Naive Bayes'),
+    minutes = c(rf_dur, svm_dur, knn_dur, mn_dur, nb_dur)
+  ) %>%
+    arrange(desc(minutes))
+  
+  saveRDS(train_durs.df, file = "train_durs.Rda")
+
+} else {
+  
+  train_durs.df <- readRDS("train_durs.Rda")
+  
+}
+
+
+train_durs.df
+
+```
+
+### Resample Models
+
+```{r accuracy check}
+# resampling  results
+rs <- resamples(list(rf = rf, svm = svm, knn = knn, multinomial = multinom, naive_bayes = nb))
+summary(rs)
+
+```
+
+Based on the results above, SVM looks to be the most accurate model.
+
+```{r test accuracy}
+
+test2$rf <- predict(rf, test2)
+test2$svm <- predict(svm, test2)
+test2$knn <- predict(knn, test2)
+test2$mn <- predict(multinom, test2)
+test2$nb <- predict(nb, test2)
+
+rf_acc <- sum(test2$label == test2$rf) / nrow(test2)
+svm_acc <- sum(test2$label == test2$svm) / nrow(test2)
+knn_acc <- sum(test2$label == test2$knn) / nrow(test2)
+mn_acc <- sum(test2$label == test2$mn) / nrow(test2)
+nb_acc <- sum(test2$label == test2$nb) / nrow(test2)
+
+# show accuracy
+data.frame(
+  model_type = c('Random Forest', 'SVM Radial', 'KNN', 'Multinomial Logisitic Regression', 'Naive Bayes'),
+  accuracy = c(rf_acc, svm_acc, knn_acc, mn_acc, nb_acc)
+) %>%
+  arrange(desc(accuracy))
+
+```
+
+After calculating the prediction accuracy on the test set, the support vector machine model using a radial kernel has a minor lead over the random forest model model.
+
+### Classification Evaluation
+
+```{r eval svm}
+# confusion matrix for SVM Radial
+cm <- confusionMatrix(test2$svm, test2$label)
+
+cm$table
+```
+
+As expected, the errors in the supervised models trained using only variables summarizing subsections or shapes of the original training data led to specific items of clothing to be confused for others. Similarly shaped items show the most classifications. 
+
+The SVM model commonly misclassifies pullovers as coats and shirts as t-shirts/tops or pullovers. Additionally, for each of the three types of footwear, the errors predicted by the model are most likely one of other two footwear types.
+
+```{r}
+# overall accuracy
+overall_accuracy <-cm$overall[1]
+
+# data frame of results by class
+byclass <- cm$byClass %>% 
+  as.data.frame()
+
+# add in label as variable instead of row name
+byclass$label <- row.names(byclass) %>%
+  str_replace('Class: ','')
+
+# plot
+ggplot(byclass, aes(x = `Pos Pred Value`, y = reorder(label, `Pos Pred Value`))) +
+  geom_col() +
+  geom_vline(xintercept = overall_accuracy, lty = 2, color = 'blue') +
+  scale_x_continuous(labels = percent_format(accuracy=1)) +
+  labs(y = '', title = 'SVM Accuracy by Label') +
+  theme_bw()
+
+```
+
+The above plot shows the model's accuracy by label, with the blue vertical line representing the overall accuracy. We can see that shirts, pullovers, coats, and T-shirt/tops were the classes that performed the poorest. The similar shapes of the items suggest that the derived variables that were used did not adequately pick up the variance among the items.
+
+
+# Comparisons
+
+## Functions & Packages
+
+- The first function sets panel, axis, legend, and strip properties to all calls to ggplot in the rest of the document
+- the remaining functions are meant to integrate all models for purposes of visualizing and comparing results
+
+```{r}
+library(tidyverse)
+library(magrittr)
+library(ggplot2)
+library(caret)
+
+
+## 1. Function to set panel, axis, legend, and strip properties to all calls to ggplot in the rest of the document
+
+gg_theme <- function(){
+  theme_bw()
+    theme(
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+      panel.background = element_blank(),
+      axis.title = element_text(face="bold"),
+      axis.text = element_text(face="bold"),
+      axis.line = element_line(color="#17212d"),
+      legend.title=element_text(size=rel(.75),face="bold"),
+      legend.text=element_text(size=rel(.65),face="bold"),
+      legend.key=element_rect(size=rel(.5),fill="transparent", color=NA),
+      legend.key.size=unit(1, "lines"),
+      legend.background=element_rect(fill="transparent",color=NA),
+      strip.background=element_rect(fill="#17212d", color="#17212d"),
+      strip.text=element_text(color="white", face="bold")
+     )
+
+}
+
+# this command will set the theme for the rest of the document
+theme_set(gg_theme())
+## _________________________________________________________
+
+## 2. This function takes in a list of models (of class: train) and the test (no labels)
+## Will output a dataframe of 10,000  obs where each column is a vector of model predictions
+## Save the output to a variable and use an input to other functions:
+      ## plot.con.mat()
+      ## get.overall.acc()
+      ## get.byclass.acc()
+    
+get.prediction.df <- function(mod.list, test.data){
+    df <- as.data.frame(matrix(NA, ncol = length(mod.list), nrow =nrow(test.data)))
+    c.names <- vector()
+    
+    for(i in 1:length(mod.list)){
+      c.names[i] <- names(mod.list)[i]
+      mod.pred <- predict(mod.list[[i]], test.data) %>% as.data.frame()
+      df[,i] <- mod.pred
+    }
+    colnames(df) <- c.names
+    return(df)
+}
+##_____________________________________________________________
+
+## 3. Function for confusion matrix visualization (See results section)
+## Arguments: vector of model predictions, vector of test set labels, and string of the name of the model 
+## Output is a confusion matrix with 'prop' indicating the proportion of each predicted class relative to the sum of its reference class 
+
+plot.confusion.matrix <- function(mod.predict, test.data.label, mod.type){
+  
+  # tabulate confusion matrix as a dataframe
+  tab <- data.frame(confusionMatrix(mod.predict, test.data.label)$table)
+  
+  # clothing categories
+  label_cats = c('Top', 'Trouser', 'Pullover', 'Dress', 'Coat',  
+                'Sandal', 'Shirt', 'Sneaker', 'Bag', 'Boot')
+  
+  # group by Reference class to calculate per class proportions for each predicted value
+  plot.tab <- tab %>%
+    group_by(Reference) %>%
+    mutate(prop = Freq/sum(Freq))
+
+  # make a heatmap of the confusion matrix
+  ggplot(data = plot.tab, mapping = aes(x = Reference, y = Prediction, fill =prop)) +
+    geom_tile() +
+    geom_text(aes(label = Freq), vjust = .5, fontface  = "bold", alpha = 1) +
+    scale_fill_viridis_c(direction=-1, option="plasma")+
+    #scale_fill_gradient("blues") +  
+    xlim(rev(levels(tab$Reference))) +
+    scale_x_discrete(labels=label_cats) +
+    scale_y_discrete(labels=label_cats) +
+    labs(x="Actual",
+       y="Predicted",
+       title = paste0(mod.type, " Confusion Matrix Heatmap"))
+}
+## ___________________________________________________
+
+## 4. Function to compare overall accuracy and Kappa Score results for each model, returns a bar graph 
+get.overall.acc <- function(model.prediction.df, test.set.labels){
+  df <- data.frame()
+  names<- c()
+  
+  for(i in 1:ncol(model.prediction.df)){
+    #print(i)
+    names[i] <- colnames(model.prediction.df[i])
+    df <- rbind(df, confusionMatrix(model.prediction.df[,i], test.set.labels)$overall %>% 
+                    data.frame() %>% 
+                    t() )
+  }
+  df %>% dplyr::select(Accuracy,Kappa) %>% 
+    mutate(model=names) %>% 
+    pivot_longer(-model) %>%  
+      ggplot(aes(x=model,y=value)) + geom_bar(stat="identity", col="#17212d", fill="#17212d") +
+      geom_text(aes(label = round(value,3)), size = 4, hjust = 0.5, vjust = 3, col="white") +
+      facet_wrap(~name)
+}
+
+###_____________________________________________________________
+
+## 5. Plots by-class accuracy results for all models 
+get.byclass.acc <- function(model.prediction.df, test.set.labels){
+  df <- data.frame()
+  model <- c()
+  # clothing categories
+  label_cats = c('Top', 'Trouser', 'Pullover', 'Dress', 'Coat',  
+                'Sandal', 'Shirt', 'Sneaker', 'Bag', 'Boot')
+  
+  for(i in 1:ncol(model.prediction.df)){
+    print(i)
+    model <- colnames(model.prediction.df[i])
+    
+    df <- rbind(confusionMatrix(model.prediction.df[,i], test.set.labels)$byClass %>% 
+      data.frame() %>% 
+      dplyr::select(Sensitivity, Accuracy=Balanced.Accuracy) %>%   
+      rownames_to_column(var="Class") %>%
+      pivot_longer(-Class) %>% 
+      mutate(model=model),
+      df)
+    }
+  df %>% 
+    ggplot(aes(y=value,x=Class, fill=model)) + 
+    geom_col(position="dodge", width=0.25)+
+    scale_fill_viridis_d(option="plasma")+ 
+    scale_x_discrete(labels=label_cats) +
+    labs(x="",y="",title="By-Class Accuracy Metrics")+
+    #geom_text(aes(label = round(value,3)), size = 3, hjust = .4, vjust = 3, col="white",position="dodge") +
+    facet_wrap(~name,nrow=5)
+}
+```
+
+## Methods
+
+Principle Component Analysis was used to reduce the number of dimensions. The dataset was reduced from 255 predictors to 10 principle components which explain 99% of the variance of the dataset. This reduced dataset requires less computing resources and contains the majority of the information. PCA statistically reduces the dimensions of a set of correlated variables by transforming them into a smaller number of linearly uncorrelated variables. The calculated principal components are linear combinations of the original data.
+
+## Models
+
+Three models were trained, and quality of predictions was evaluated. For each model, hyperparamters were tuned using 10-fold-cross-validation on the training set to find the combination that maximized Accuracy. Due to the large number of observations in the Fashion MNIST training set, only the first 10,000 observation were used due to insufficient computing power.
+
+### 1. Stochastic Gradient Boosting
+
+
+
+Gradient boosting is an ensemble machine learning technique that has application in both regression and classification, and is typically used in decision trees. It is premised on building a sequence of weak models where each at each iteration a new tree fits the errors from the previous. For this application, a stochastic gradient boosting (SGB) model will be used. In SGB, a random subsample (without replacement) of variables is used at each iteration so that correlation between successive trees is reduced. Successive trees leverage this randomness to update errors of the base.
+
+There are four hyperparameters that are to be tuned for this model, and a brief description of each is provided as well as the values that were supplied to the grid for cross validation purposes of the model tuning effort:
+
+-1. Number of trees (n.trees): This refers to the total number of trees to be used in the ensemble. Too many trees can result in overfitting while too few trees can result in underfitting due to the corrective, iterative nature of the algorithm where successive tree’s correct the errors at the previous step. Values from 500 to 2500 by 500 were tested during cross validation.
+
+-2. Interaction depth (interaction.depth): Controls the depth of the individual trees and subset of random variables at each iteration step. Higher depth trees allows capturing of predictor interactions but could also result in over-fitting. Values from 1 to 7 by 2 were tested.
+
+-3. Learning rate (shrinkage): This parameter sets the rate at which a tree learns from the base learner. Smaller rates learn less quickly thus reducing the chances of overfitting but will require a larger number of trees and computation power. Values 0.01, and 0.1 were tested.
+
+-4. Minimum number of observations in terminal nodes (n.minobsinnode): Like interaction depth, this also controls the complexity of each tree. Values of 1, 2, and 5 were tested.
+
+- The final values used for the model were n.trees = 2000, interaction.depth = 5, shrinkage = 0.01 and n.minobsinnode = 1
+
+
+### 2. Random Forest
+
+Random forest is an ensemble decision tree method where a series of decision trees independent from each other are provided a random subset of the predictor space. The results of each bootstrapped iteration are then given an aggregated response. There is only one hyperparameter for the rf implementation of the random forest algorithm that was used.
+
+-1. Number of variables (mtry): This defines the manner in which variable bootstrapping is conducted by controlling the maximum number of variables that are subset at each interation of the ensemble. Integer values from 1 to 6 inclusive were tested during cross validation.
+
+- The final value used for the model was mtry = 3.
+
+
+### 3. Neural Network
+
+A neural network based on averaging of random seeds, avNNet was trained. The following hyperparamters were tuned using cross-validation.
+
+-1 Number of hidden layers (size): This defines the complexity of the network
+
+-2 Decay: penalty term for large coefficients; used to regularaize model
+
+-The final values used for the model were size = 12, decay = 0.01
+
+## Results
+
+```{r}
+## these are test set data i used based on 10 principle components
+## and each of the three models 
+download.file("https://raw.githubusercontent.com/robertwelk/DATA622/main/test.data.pca.rds","test.data.pca.rds", method="curl")
+test.data <- readRDS("test.data.pca.rds")
+
+download.file("https://raw.githubusercontent.com/robertwelk/DATA622/main/rf.rds","rf_mod.rds", method="curl")
+rf.mod <- readRDS("rf_mod.rds")
+
+download.file("https://raw.githubusercontent.com/robertwelk/DATA622/main/gbm.rds","gbm_mod.rds", method="curl")
+gbm.mod <- readRDS("gbm_mod.rds")
+
+download.file("https://raw.githubusercontent.com/robertwelk/DATA622/main/nn.rds","nn_mod.rds", method="curl")
+nn.mod <- readRDS("nn_mod.rds")
+
+
+######## input all model object to this list ###########
+# The functions above use this list to generate result summary visuals 
+mod.list <- list(random.forest=rf.mod,
+                 gradient.boosted=gbm.mod,
+                 neural.net=nn.mod
+                 )
+##############################################
+
+
+## here, a dataframe that stores predictions for all models is made
+## Please note: this function will have to be run each time a test set with different number/names of predictors is used so multiple mod.lists might have to be made for different test set data
+model.pred.df <- get.prediction.df(mod.list, test.data)
+
+  ## example of merging together different test set data: 
+      ## model.pred.df <- model.pred.df %>% bind_cols(get.prediction.df(mod.list2, test.data2) )
+```
+
+### Overall Accuracy
+
+A high-level overview of the model based on metrics Accuracy and Cohen’s Kappa, not considering classes of clothing.
+
+Accuracy describes how often the classifier was correct, and is defined as the sum of true positive and true negatives divided by the total number of observations. This was determined to be an appropriate metric to evaluate overall model performance since the test set classes are balanced.
+
+The Cohen’s Kappa statistic is a measure of how well the model prediction matched the labeled test set, while controlling for the accuracy that would have been produced by a random classifier. As a stand alone metric, kappa can be difficult to interpret, but is useful for between model comparisons.
+
+```{r}
+get.overall.acc(model.pred.df, test.data$label)
+```
+
+### By-Class Results
+
+Next a model results are evaluated considering class categories
+
+The following metrics were calculated on each of the classes: - Once again accuracy is used. - We also consider Sensitivity, the true positive rate
+
+This graph allows for a comparison of model performances for each article of clothing.
+
+```{r}
+get.byclass.acc(model.pred.df, test.data$label)
+```
+
+### Confusion Matrices
+
+Shows predictive power classes and models.
+
+```{r}
+plot.confusion.matrix(model.pred.df$random.forest, test.data$label, "Random Forest")
+plot.confusion.matrix(model.pred.df$gradient.boosted, test.data$label, "Gradient Boosted")
+plot.confusion.matrix(model.pred.df$neural.net, test.data$label, "Neural Net")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<br><br><br>
