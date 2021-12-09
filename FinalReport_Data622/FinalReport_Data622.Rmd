@@ -34,44 +34,80 @@ output: rticles::arxiv_article
 
 # Introduction
 
-Fashion MNIST is a clothing classification dataset that builds in complexity in comparison to the classic MNIST dataset. MNIST is a dataset of handwritten digits that has been a go-to dataset for benchmarking various image processing and machine learning algorithms [@lecun1998gradient]. Classification algorithms applied to MNIST revolutionized the field of image processing in the 90s [@krizhevsky2009learning]. However, contemporary machine learning methods can achieve 97% accuracy. Convolutional neural nets score as high as 99.7% accurate. As a result, MNIST is now considered too easy and has also been used thoroughly. Fashion MNIST was developed as an alternative.
+Fashion MNIST is a clothing classification dataset that builds in complexity in comparison to the classic MNIST dataset. MNIST is a dataset of handwritten digits that has been a go-to dataset for benchmarking various image processing and machine learning algorithms [@lecun1998gradient]. Classification algorithms applied to MNIST revolutionized the field of image processing in the 90s [@krizhevsky2009learning]. However, contemporary machine learning methods can achieve 97% accuracy. Convolutional neural nets score as high as 99.7% accurate. As a result, MNIST is now considered too easy and, with ~48000 MNIST related publications [@noever2021overhead], MNIST has also been used exhaustively. Fashion MNIST was developed as an alternative.
 
-Fashion MNIST can serve as a direct drop-in replacement for MNIST. Fashion MNIST and MNIST are both labeled data that share the same dataset size: 60,000 training images and 10,000 test images. Additionally, Fashion MNIST and MNIST images share the same dimensions and structure: 10 distinct categories of grayscale images with 28x28 pixel size. Due to the complexity and variety of the images, Fashion MNIST is a more challenginf dataset for machine learning algorithms [@xiao2017fashion].
-
-In your report, be sure to:
-
-- describe the problem you are trying to solve.
-
-- describe your datasets and what you did to prepare the data for analysis. 
-
-- methodologies you used for analyzing the data
-
-- why you did what you did
-
-- make your conclusions from your analysis. Please be sure to address the business impact (it could be of any domain) of your solution.
+Fashion MNIST can serve as a direct drop-in replacement for MNIST. Fashion MNIST and MNIST are both labeled data that share the same dataset size: 60,000 training images and 10,000 test images. Additionally, Fashion MNIST and MNIST images share the same dimensions and structure: 10 distinct categories of grayscale images with 28x28 pixel size. Figure 1 depicts a sampling of several dozen example Fashion-MNIST images. Due to the complexity and variety of the images, Fashion MNIST is a more challenging dataset for machine learning algorithms [@xiao2017fashion].
 
 
-# Headings: first level
+```{r message=FALSE, echo=FALSE, out.width = "60%", fig.align = 'center', fig.cap = "Exemplar Fashion-MNIST images. All image files are grayscale 28x28 images"}
+library(knitr)
+library(ggplot2)
+library(png)  
+img1_path <- '/home/bonzilla/Documents/MSDS/Data622_group5_projects/FinalReport_Data622/exemplars.png'
+img1 <- readPNG(img1_path, native = TRUE, info = TRUE)
+include_graphics(img1_path)
+```
+
+In this report we utilize Fashion MNIST to implement a variety of machine learning approaches covered over the course of our studies in Data622: Machine Learning and Big Data as part of the Masters of Data Science program at CUNY School of Professional Studies. Our goal is to optimize the classification of Fashion MNIST images using a variety of machine learning algorithms. Here, we describe our approaches and compare classification model performance.  
+
+With an image size of 28 x 28, Fashion MNIST images, in their raw form, are very high dimensional data with a total of 784 features. Additionally, there is a relatively high degree of correlation between pixel values of a given image. That is to say that, unless an pixel is at an object border, a light pixel in a region of the image is very likely to be situated next to light neighboring pixels, likewise for dark pixels. We can assess this by observing the mean and standard deviation of the pixel values across the dataset. 
+
+Figure 2 visualizes the mean (left) and standard deviations (right) of the pixel values for the `train` dataset. For both plots, higher intensity values are rendered as dark whereas low values are light. For many of the pixels in the image, the mean values is intermediate (gray) whereas the standard deviation is relatively high (dark). These pixels make up most of the variance in the dataset. However, we can see that there are two regions of pixels towards the image center where the mean pixel value is high (dark) while the pixel standard deviation is low (light). For these regions, the pixels have consistently high pixel values. Towards the periphery of the image there are pixels with both low mean values (light) and low standard deviation (light). These pixels have consistently low values. The pixels with either consistently low or high values are of low information content and would not contribute much to models for image classification if used as features. Therefore, we describe two methods forreducing the dimensionality of the Fashion-MNIST dataset. Furthermore, this report goes on to describe multiple different models developed from the resulting reduced sets and evaluate the performances.
+
+```{r message=FALSE, echo=FALSE, out.width = "90%", fig.align = 'center', fig.cap = "Pixel values across dataset. Left panel: mean pixel values. Right panel: pixel value standard deviation"}
+img2_path <- '/home/bonzilla/Documents/MSDS/Data622_group5_projects/FinalReport_Data622/pixvals.png'
+img2 <- readPNG(img2_path, native = TRUE, info = TRUE)
+include_graphics(img2_path)
+```
+
+
+# Principal Component Analysis
 \label{sec:headings}
 
-You can use directly LaTeX command or Markdown text. 
+We have shown above that there is redundancy in the fashion MNIST dataset. Here we will use PCA to reduce the number of features while retaining as much of the variance possible. PCA does this by finding a new set of axes that fit to the variance of the data. At heart, PCA is simply an eigendecomposition of the data which returns a set of eigenvectors and eigenvalues. Eigenvectors and eigenvalues describe the transformations necessary to go from the original axes to a new feature space.    
 
-LaTeX command can be used to reference other section. See Section \ref{sec:headings}.
-However, you can also use **bookdown** extensions mechanism for this.
+We can use the results of PCA to perform a type of information compression on the original data by subsetting the amount of PCA components we use to describe the original data. For this analysis, we will use a criterion of 95% variance explained. From the 784 components that PCA yields, we will subset the minimum components needed such that the sum of the proportions of explained variance is greater than or equal to 95%. Such a manipulation is favorable because it will reduce redundancy in the data, the chances of overfitting, and the time necessary to train models.
 
-## Headings: second level
 
-You can use equation in blocks
+```{r message=FALSE, echo=FALSE, out.width = "90%", fig.align = 'center', fig.cap = "PCA Results. The Skree plot (Left) shows the proportion on explained variance for each the first 20 principal components. The Cumulative Explained Variance plot (Right) shows the total variance explained by successively addding up to 200 principal components"}
+img3_path <- '/home/bonzilla/Documents/MSDS/Data622_group5_projects/FinalReport_Data622/pcaskree.png'
+img3 <- readPNG(img3_path, native = TRUE, info = TRUE)
+include_graphics(img3_path)
+```
 
-$$
-\xi _{ij}(t)=P(x_{t}=i,x_{t+1}=j|y,v,w;\theta)= {\frac {\alpha _{i}(t)a^{w_t}_{ij}\beta _{j}(t+1)b^{v_{t+1}}_{j}(y_{t+1})}{\sum _{i=1}^{N} \sum _{j=1}^{N} \alpha _{i}(t)a^{w_t}_{ij}\beta _{j}(t+1)b^{v_{t+1}}_{j}(y_{t+1})}}
-$$
+From the skree plot, we can see a very sharp drop off in the proportion of explained variance. Principal Components greater than 12 account for less than 1% of the dataset's variance. The first 12 components only account for a cumulative variance of 0.74, therefore it takes the combined contribution of many more components (187 components) to explain 95% of the variance of each pixel for the original images. 
 
-But also inline i.e $z=x+y$
+```{r message=FALSE, echo=FALSE, out.width = "90%", fig.align = 'center', fig.cap = "Visualizing PCA Components. The top row (from left to right) and bottom left panel visualize principal components 1 through 4. The middle panel of the bottom row shows the 392th component. The bottom right panels shows principal component 784"}
+img4_path <- '/home/bonzilla/Documents/MSDS/Data622_group5_projects/FinalReport_Data622/pcacomps.png'
+img4 <- readPNG(img4_path, native = TRUE, info = TRUE)
+include_graphics(img4_path)
+```
 
-### Headings: third level
+PCA returns a components for every dimension of the data in descending order of the amount of variance accounted for. The figure above shows the the first 4 components, component PC392 (middle), and the last component PC784. As already depicted in the Skree and Cumulative Explained Variance plots, the first four components explain 0.58% variance from PC1: 22.1% $\rightarrow$ PC2: 5.1% variance. We can see clearly from the visualization of the components that the first several PCs are clearly discriminating between clothing classifications. For instance, PC1 distinguishes between T-shirt/top & Pullover (dark/high values) and shoe categories (light/low values). On the other hand, PC2 appears to distinguish Trousers from shoe categories. The representation become less clear as the explained variance decreases. For instance, PC392 and PC784 only explain 0.01% and 0.001% variance respectively and it is not clear from the visualization just what information these components represent.  
 
-Another paragraph. 
+PC1 and PC2 account for roughly half (0.47) of the train dataset's variance. We can visualize the projections of the train data onto the features space of these two components:
+
+```{r message=FALSE, echo=FALSE, out.width = "90%", fig.align = 'center', fig.cap = "Magnitudes of PCA 1 and 2 for all Fashion-MNIST images from the 'train' dataset. Datapoints are shaded according the clothing category. A black text label is rendered at the mean PC1 and PC2 values for each category."}
+img5_path <- '/home/bonzilla/Documents/MSDS/Data622_group5_projects/FinalReport_Data622/pcaproj.png'
+img5 <- readPNG(img5_path, native = TRUE, info = TRUE)
+include_graphics(img5_path)
+```
+
+The figure above shows the representations of the `train` images in the feature space of the first 2 dimensions. Each clothing item category is represented by a different color. For clarity, a text label (in black) which corresponds to the categorical mean values of PC1 & PC2 has been added. We can see that there is noticeable separation across the categories. Additionally, we see some clustering of category means that meets expectations. For example, the shoe categories (Sandal, Sneaker and Ankle Boot) group together towards the lower left hand corner of the figure. Clothing items that could all be described as tops with sleeves ( Pullover, Coat, Shirt & T-shirt/top) group together in the middle of the distribution. Trousers, on the other hand, have a noticeable distance from tops with sleeves but ar contiguous with the dress category which shares roughly vertical rectangular profile.  
+
+Here we find the representation onto the first 187 components which were shown earlier to account for 95% of the variance in the image data:
+
+```{r message=FALSE, echo=FALSE, out.width = "90%", fig.align = 'center', fig.cap = "Reconstructed Images using 187 Principal Components. Original Fashion-MNIST images are rendered next to the corresponding compressed images which are reconstructed from the first 187 components"}
+img6_path <- '/home/bonzilla/Documents/MSDS/Data622_group5_projects/FinalReport_Data622/pca_reconstruct.png'
+img6 <- readPNG(img6_path, native = TRUE, info = TRUE)
+include_graphics(img6_path)
+```
+
+Truncating the data to 187 components does result in information loss, however, as we can see from the visualizations above, the images retain much of the detail from the original images while using a feature space `r round(187/784*100,2)`% the size of the original.
+
+PCA is a dimensionality reduction method that can be applied to high dimensional datasets. PCA reduces the number of features while preserving as much variance from the data as possible. Here we used PCA to reduce the number of features of the Fashion MNIST dataset from 784 to 187. We showed through a series of visualizations that transforming the images to the reduced feature space does so with an noticeable loss to image quality, however the gist of the images is still present.
+
+# 
 
 
 # Examples of citations, figures, tables, references
@@ -164,3 +200,15 @@ knitr::kable(head(mtcars), caption = "Head of mtcars table")
 - Item 1
 - Item 2 
 - Item 3
+
+In your report, be sure to:
+
+- describe the problem you are trying to solve.
+
+- describe your datasets and what you did to prepare the data for analysis. 
+
+- methodologies you used for analyzing the data
+
+- why you did what you did
+
+- make your conclusions from your analysis. Please be sure to address the business impact (it could be of any domain) of your solution.
