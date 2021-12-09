@@ -87,16 +87,6 @@ fashion MNIST}
 \newcommand{\VerbatimStringTok}[1]{\textcolor[rgb]{0.31,0.60,0.02}{#1}}
 \newcommand{\WarningTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{\textbf{\textit{#1}}}}
 
-\usepackage{longtable,booktabs,array}
-\usepackage{calc} % for calculating minipage widths
-% Correct order of tables after \paragraph or \subparagraph
-\usepackage{etoolbox}
-\makeatletter
-\patchcmd\longtable{\par}{\if@noskipsec\mbox{}\fi\par}{}{}
-\makeatother
-% Allow footnotes in longtable head/foot
-\IfFileExists{footnotehyper.sty}{\usepackage{footnotehyper}}{\usepackage{footnote}}
-\makesavenoteenv{longtable}
 
 % Pandoc citation processing
 \newlength{\csllabelwidth}
@@ -164,11 +154,11 @@ benchmarking various image processing and machine learning algorithms
 (LeCun et al. 1998). Classification algorithms applied to MNIST
 revolutionized the field of image processing in the 90s (Krizhevsky,
 Hinton, and others 2009). However, contemporary machine learning methods
-can achieve 97\% accuracy. Convolutional neural nets score as high as
-99.7\% accurate. As a result, MNIST is now considered too easy and, with
-\textasciitilde48000 MNIST related publications (Noever and Noever
-2021), MNIST has also been used exhaustively. Fashion MNIST was
-developed as an alternative.
+can achieve 97\% accuracy. Convolutional neural networks score as high
+as 99.7\% accuracy. As a result, MNIST is now considered too easy and,
+with \textasciitilde48000 MNIST related publications (Noever and Noever
+2021), MNIST has also been used by the machine learning community
+exhaustively. Fashion MNIST was developed as an alternative.
 
 Fashion MNIST can serve as a direct drop-in replacement for MNIST.
 Fashion MNIST and MNIST are both labeled data that share the same
@@ -198,32 +188,32 @@ machine learning algorithms. Here, we describe our approaches and
 compare classification model performance.
 
 With an image size of 28 x 28, Fashion MNIST images, in their raw form,
-are very high dimensional data with a total of 784 features.
-Additionally, there is a relatively high degree of correlation between
-pixel values of a given image. That is to say that, unless an pixel is
-at an object border, a light pixel in a region of the image is very
-likely to be situated next to light neighboring pixels, likewise for
-dark pixels. We can assess this by observing the mean and standard
-deviation of the pixel values across the dataset.
+are high dimensional data with a total of 784 features. Additionally,
+there is a relatively high degree of correlation between pixel values of
+a given image. That is to say that, unless an pixel is at an object
+border, a light pixel in a region of the image is very likely to be
+situated next to light neighboring pixels, likewise for dark pixels. We
+can assess this by observing the mean and standard deviation of the
+pixel values across the dataset.
 
 Figure 2 visualizes the mean (left) and standard deviations (right) of
 the pixel values for the \texttt{train} dataset. For both plots, higher
 intensity values are rendered as dark whereas low values are light. For
-many of the pixels in the image, the mean values is intermediate (gray)
-whereas the standard deviation is relatively high (dark). These pixels
-make up most of the variance in the dataset. However, we can see that
-there are two regions of pixels towards the image center where the mean
-pixel value is high (dark) while the pixel standard deviation is low
-(light). For these regions, the pixels have consistently high pixel
-values. Towards the periphery of the image there are pixels with both
-low mean values (light) and low standard deviation (light). These pixels
-have consistently low values. The pixels with either consistently low or
-high values are of low information content and would not contribute much
-to models for image classification if used as features. Therefore, we
-describe two methods forreducing the dimensionality of the Fashion-MNIST
-dataset. Furthermore, this report goes on to describe multiple different
-models developed from the resulting reduced sets and evaluate the
-performances.
+many of the pixels in the image, the mean values are intermediate (gray)
+whereas the corresponding standard deviations are relatively high
+(dark). These pixels make up most of the variance in the dataset.
+However, we can see that there are two regions of pixels towards the
+image center where the mean pixel value is high (dark) while the pixel
+standard deviation is low (light). For these regions, the pixels have
+consistently high pixel values. Towards the periphery of the image there
+are pixels with both low mean values (light) and low standard deviation
+(light). These pixels have consistently low values. The pixels with
+either consistently low or high values are of low information content
+and would not contribute much to models for image classification if used
+as features. Therefore, we describe two methods for reducing the
+dimensionality of the Fashion-MNIST dataset. Furthermore, this report
+goes on to describe multiple different models developed from the
+resulting reduced sets and evaluate the performances.
 
 \begin{figure}
 
@@ -234,9 +224,174 @@ performances.
 \caption{Pixel values across dataset. Left panel: mean pixel values. Right panel: pixel value standard deviation}\label{fig:unnamed-chunk-2}
 \end{figure}
 
-\hypertarget{principal-component-analysis}{%
-\section{Principal Component
-Analysis}\label{principal-component-analysis}}
+\hypertarget{modeling-fashion-mnist-with-engineered-features}{%
+\section{Modeling Fashion-MNIST with Engineered
+Features}\label{modeling-fashion-mnist-with-engineered-features}}
+
+\hypertarget{building-feature-representations-based-on-categorical-differences}{%
+\subsection{Building Feature Representations based on Categorical
+Differences}\label{building-feature-representations-based-on-categorical-differences}}
+
+One of the methods that can be used for dimensionality reduction is
+feature engineering. Instead of processing \(28^2\) or 784 individual
+variables, we will use feature engineering to process the data into
+fewer variables that attempt to summarize information within the
+original dataset. If resources were unlimited, we could use both the
+original pixel variables along with the features below.
+
+\begin{figure}
+
+{\centering \includegraphics[width=0.9\linewidth]{/home/bonzilla/Documents/MSDS/Data622_group5_projects/FinalReport_Data622/ly_catpixused} 
+
+}
+
+\caption{Categorical Heat Map: Each panel shows mean pixel intensity for each Fashion-MNIST category}\label{fig:unnamed-chunk-3}
+\end{figure}
+
+Figure 3 is similar to Figure 2, however Figure 3 shows the mean pixels
+intensity for each Fashion-MNIST categorical label. Here we are
+attempting to generalize the shapes and pixels used by each of the
+different fashion items. Looking at the shoes, we can see that there are
+full horizontal rows that are completely white, which is also common to
+bags. As we look at the differences and similarities of each of the
+classes, the shape of different sections allows us to classify the
+labels in our minds, which we'll try to replicate with feature
+engineering that follows. If we can create new variables to try and
+capture the differences in shape, we can see if those variables will be
+useful in contributing to the accuracy of the models we train.
+
+Below is a description of the engineered feature set:
+
+\begin{itemize}
+\tightlist
+\item
+  \% of pixels that are different shades of grey -- 0, 50, 87, 167, 209,
+  255
+
+  \begin{itemize}
+  \tightlist
+  \item
+    white: 0
+  \item
+    grey1: 1-46
+  \item
+    grey2: 47-93
+  \item
+    grey3: 94-168
+  \item
+    grey4: 169-205\\
+  \item
+    black: 206-255
+  \end{itemize}
+\item
+  \% of non-white pixels in each of the 28 rows
+\item
+  \% of non-white pixels in each of the 28 columns
+\item
+  \% of rows that are completely white
+\item
+  \% of columns that are completely white
+\item
+  10 custom blocks that are subsections of the grids, showing percent
+  non-white as well as percent light grey (1 - 122).
+\end{itemize}
+
+The features listed were determined by visually analyzing the Figure 3.
+Moving forward in this report, this feature set will be referred to as
+the Feature Engineered dataset. For detailed code that describes the
+feature generation, please refer to the report code documentation.
+
+\hypertarget{modeling-fashion-mnist-with-the-featured-engineered-dataset}{%
+\subsection{Modeling Fashion-MNIST with the Featured Engineered
+Dataset}\label{modeling-fashion-mnist-with-the-featured-engineered-dataset}}
+
+Once the Feature Engineered dataset was generated, we performed 10 fold
+cross validation to train the following models:
+
+\begin{itemize}
+\tightlist
+\item
+  Random forest
+\item
+  Support vector machine using a radial kernel
+\item
+  k-Nearest Neightbor
+\item
+  Multinomial logistic regression
+\item
+  Naive Bayes
+\end{itemize}
+
+These models were trained exclusively on our Feature Engineered dataset.
+Additionally, in order to deal with the hardware limitations of personal
+computers, the training data will only use a fraction of the original
+60,000 training records. The training set used was a stratified sample
+which accounts for 16.7\% or 10,010 observations of the original
+training set.
+
+\begin{table}
+ \caption{Model Training Summary}
+  \centering
+  \begin{tabular}{llll}
+    \toprule
+    Model Type     & Training Duration (min)  & Training Accuracy & Test Accuracy \\
+    \midrule
+    SVM (Radial) & 19.0  & 0.854 & 0.856 \\
+    Multinomial Log Reg     & 9.3  &  0.861 & 0.824 \\
+    Random Forest     & 5.5  &  0.799 & 0.855 \\
+    k-NN     & 2.6  &  0.8292 & 0.795 \\    
+    Naive Bayes     & 0.2  & 0.715 & 0.713 \\    
+    \bottomrule
+  \end{tabular}
+  \label{tab:table}
+\end{table}
+
+Table 1 gives a summary of a few select metrics that describe the
+training and evaluating of the different model approaches. In terms of
+training duration, the fastest model was Naive-Bayes at 0.2 minutes.
+However, the radial Support Vector Machine (SVM) model trained for the
+longest at 19 minutes. Model duration is important to consider,
+especially since all modeling procedures using the Engineered Feature
+dataset we used a subset of \textasciitilde10,000 training instances.
+Despite the long training, the radial SVM model performed the best by
+scoring the highest accuracy on the test data. However, the Random
+Forest model achieved a comparable test accuracy. Therefore, if a long
+training durations are of concern, the Ransom Forest model is a
+reasonable alternative.
+
+\begin{figure}
+
+{\centering \includegraphics[width=0.9\linewidth]{/home/bonzilla/Documents/MSDS/Data622_group5_projects/FinalReport_Data622/ly_SVMlabelacc} 
+
+}
+
+\caption{SVM Accuracy by Label. the accuracy for each Fashion-MNIST label category is given as a row in this vertical bar chart. The blue line shows the overall accuracy for classification of the test data.}\label{fig:unnamed-chunk-4}
+\end{figure}
+
+The performance accuracy given in Table 1 is an important measure of a
+model's performance. However, it is not a very thorough measure of a
+model's ability to predict the proper labels. Therefore, we also looked
+at accuracy for the SVM model broken down by category. Figure 4 shows
+the accuracy for each Fashion-MNIST categorical label. As expected, the
+errors for the SVM model trained using only variables summarizing
+subsections or shapes of the original training data led to specific
+items of clothing to be confused for others. For instance, similarly
+shaped items such as `Shirt,' `Pullover,' and `Coat' show the lowest
+accuracy for classifications. The similar shapes of the items suggest
+that the derived variables that were used did not adequately pick up the
+variance among the items. Furthermore, the confusion matrix for the SVM
+model (see report code documentation) show common misclassifications of
+pullovers as coats and shirts as t-shirts/tops or pullovers.
+Additionally, for each of the three types of footwear, the errors
+predicted by the model are most likely one of other two footwear types.
+
+\hypertarget{modeling-fashion-mnist-with-principal-component-analysis}{%
+\section{Modeling Fashion-MNIST with Principal Component
+Analysis}\label{modeling-fashion-mnist-with-principal-component-analysis}}
+
+\hypertarget{principal-component-analysis-of-fashion-mnist}{%
+\subsection{Principal Component Analysis of
+Fashion-MNIST}\label{principal-component-analysis-of-fashion-mnist}}
 
 \label{sec:headings}
 
@@ -265,7 +420,7 @@ necessary to train models.
 
 }
 
-\caption{PCA Results. The Skree plot (Left) shows the proportion on explained variance for each the first 20 principal components. The Cumulative Explained Variance plot (Right) shows the total variance explained by successively addding up to 200 principal components}\label{fig:unnamed-chunk-3}
+\caption{PCA Results. The Skree plot (Left) shows the proportion on explained variance for each the first 20 principal components. The Cumulative Explained Variance plot (Right) shows the total variance explained by successively addding up to 200 principal components}\label{fig:unnamed-chunk-5}
 \end{figure}
 
 From the skree plot, we can see a very sharp drop off in the proportion
@@ -281,7 +436,7 @@ explain 95\% of the variance of each pixel for the original images.
 
 }
 
-\caption{Visualizing PCA Components. The top row (from left to right) and bottom left panel visualize principal components 1 through 4. The middle panel of the bottom row shows the 392th component. The bottom right panels shows principal component 784}\label{fig:unnamed-chunk-4}
+\caption{Visualizing PCA Components. The top row (from left to right) and bottom left panel visualize principal components 1 through 4. The middle panel of the bottom row shows the 392th component. The bottom right panels shows principal component 784}\label{fig:unnamed-chunk-6}
 \end{figure}
 
 PCA returns a components for every dimension of the data in descending
@@ -310,7 +465,7 @@ features space of these two components:
 
 }
 
-\caption{Magnitudes of PCA 1 and 2 for all Fashion-MNIST images from the 'train' dataset. Datapoints are shaded according the clothing category. A black text label is rendered at the mean PC1 and PC2 values for each category.}\label{fig:unnamed-chunk-5}
+\caption{Magnitudes of PCA 1 and 2 for all Fashion-MNIST images from the 'train' dataset. Datapoints are shaded according the clothing category. A black text label is rendered at the mean PC1 and PC2 values for each category.}\label{fig:unnamed-chunk-7}
 \end{figure}
 
 The figure above shows the representations of the \texttt{train} images
@@ -336,7 +491,7 @@ shown earlier to account for 95\% of the variance in the image data:
 
 }
 
-\caption{Reconstructed Images using 187 Principal Components. Original Fashion-MNIST images are rendered next to the corresponding compressed images which are reconstructed from the first 187 components}\label{fig:unnamed-chunk-6}
+\caption{Reconstructed Images using 187 Principal Components. Original Fashion-MNIST images are rendered next to the corresponding compressed images which are reconstructed from the first 187 components}\label{fig:unnamed-chunk-8}
 \end{figure}
 
 Truncating the data to 187 components does result in information loss,
@@ -350,158 +505,128 @@ preserving as much variance from the data as possible. Here we used PCA
 to reduce the number of features of the Fashion MNIST dataset from 784
 to 187. We showed through a series of visualizations that transforming
 the images to the reduced feature space does so with an noticeable loss
+to image quality, however the gist of the images are still present.
+
+\hypertarget{modeling-fashion-mnist-with-and-without-the-use-of-pca-compression-k-nearest-neighbors-svm}{%
+\subsection{Modeling Fashion-MNIST with and without the use of PCA
+Compression: k-Nearest Neighbors \&
+SVM}\label{modeling-fashion-mnist-with-and-without-the-use-of-pca-compression-k-nearest-neighbors-svm}}
+
+In the previous section, we showed that PCA can be used on Fashion-MNIST
+to reduce the dimensionality of the data to less than \(\frac{1}{4}th\)
+the original size. Here we implement Support Vector Machine and
+k-Nearest Neighbor, both non-parametric methods, to classify
+Fashion-MNIST images using both the original data which uses all 784
+columns of pixel values as features and the PCA compressed data which
+reduces the feature space the 187 columns. As in other analyses in the
+report, these models will also be `trained' on a subset of 10000
+samples, both to reduce training times.
+
+K-Nearest Neighbors (kNN) is a non-parametric technique that can be used
+for image classification. It's a very simple technique, wherin new
+samples are classified as the most typical class among the `k' nearest
+labeled examples it was `trained' on where `k' is an integer value. That
+being said, kNN doesn't actually train, rather, it stores the data and
+refers back to it when making classifications. For our analysis, the
+\texttt{caret} package was used to create this model, and although it
+may appear like it's fitting a model, what it's actually doing here is
+storing all the training data, then trying out different `'k values, one
+of which it will choose to use when 'predict' is called. Even if it's
+not semantically well implemented, it's still very useful for finding a
+good `k' value.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{\#Validation accuracy for different values of k }
+\CommentTok{\#plot(knn.fit)}
+\end{Highlighting}
+\end{Shaded}
+
+We begin by fitting a kNN model to the original Fashion-MNIST dataset.
+Although this analysis starts with all 784 features, whittle down some
+of the data by choosing only variables (pixels) which vary significantly
+between images. For example, if a pixel in the corner of the images has
+the same value throughout most images, this pixel will dropped from the
+data and not be used in fitting model. For full details and code, please
+refer to the report code documentation. Figure XXXX shows the
+cross-validation accuracies across several values of `k.' This plot give
+the hyperparameter tuning curve for the model. We see that k=5 performed
+as the best value with the training data.
+
+With k=5, we evaluated the model performance for classifying the test
+data. The overall accuracy for this model was 81.33\% (95\% CI: 80.57 -
+82.09\%). The confusion matrix (see report code documentation) shows
+that the model has an easier time detecting some labels than others. For
+example, it correctly classifies most of the sneakers (label 7), bags
+(8), ankle-boots (9), and trousers (1). However, it has a much harder
+time classifying pullovers (2), coats (4), sandals (5), and shirts (6).
+Shirts in particular fared poorly, with only about half correctly
+classified; t-shirts/tops (0), pullovers (2), and coats (4) were also
+often missclassified as shirts, which makes sense (they are very
+similar).
+
+PCA kNN Now we'll try kNN with the PCA compressed data, and see if it
+has any effect on performance when compared to the previous model. When
+`fit' on a sample of 10,000 samples, a k value of 7 appears to perform
+best during cross-validation. The cross-validation accuracies across k
+values of 1-11 were similar; below, this is plotted.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{\# plot(knn.pca.fit)}
+\end{Highlighting}
+\end{Shaded}
+
+The changes in accuracy avross different values of k (above) aren't
+terribly drastic. K values of 5-7 performed best across all tested
+values (not all included above).\\
+Let's try it out on the test set now. The overall accuracy of this model
+was 82.36\% (95\% CI: 81.61 - 83.11\%). It performed very similarly to
+the previous model which used a non-pca compressed dataset. We can see
+similar patterns in the confusion matrix:most of the sneakers (label 7),
+bags (8), ankle-boots (9), and trousers (1) where correctly classified.
+Also, it had a harder time classifying pullovers (2), coats (4), sandals
+(5), and shirts (6). We also see similar missclasifications to the other
+set, where shirt classification is poo, and t-shirts/tops (0), pullovers
+(2), and coats (4) were often missclassified as shirts. Similar to wat
+we saw with the SVM models, the PCA compressed kNN model actually
+performs slightly better than the regular kNN model (82.35\% vs 81.23\%
+overall accuracy; a significant difference at \(\alpha = 0.05\)). It's
+unclear why this happens. One could theorize that perhaps the removing
+some of the percision in the data may make for more robust models that
+resist over-fitting. It could also be seperating the data a bit better,
+which both SVM and kNN would benefit from significanly.
+
+\hypertarget{modeling-fashion-mnist-using-pca-compression-additional-machine-learning-models}{%
+\subsection{Modeling Fashion-MNIST using PCA Compression: Additional
+Machine Learning
+Models}\label{modeling-fashion-mnist-using-pca-compression-additional-machine-learning-models}}
+
+PCA is a dimensionality reduction method that can be applied to high
+dimensional datasets. PCA reduces the number of features while
+preserving as much variance from the data as possible. Here we used PCA
+to reduce the number of features of the Fashion MNIST dataset from 784
+to 187. We showed through a series of visualizations that transforming
+the images to the reduced feature space does so with an noticeable loss
 to image quality, however the gist of the images is still present.
+Furthermore, we used SVM model fits to evaluate performance with the
+reduced dimension PCA version of Fashion MNIST. A radial SVM classifier
+was trained on a subset of 10,000 images for both the full-featured set
+and the PCA-compressed set. The PCA-compressed model trained
+approximately 1 minute and 20seconds faster than the full-featured data.
+En face, this does difference does not sound appreciable. However,
+considering that training time for SVM scales quadratically with dataset
+size, one would expect to see noticeable improvements in performance had
+the entire \texttt{train} set been used for model training. Furthermore,
+we evaluated the classification accuracy and found that the
+PCA-compressed SVM model had a higher prediction accuracy on the test
+data. In conclusion, use of the PCA compressed dataset would be
+beneficial in down-stream modeling analysis. As a detraction, additional
+steps would be necessary to transform the data between full and
+compressed feature spaces to facilitate model interpretation.
 
-\hypertarget{headings-second-level}{%
-\subsection{Headings: second level}\label{headings-second-level}}
-
-\hypertarget{headings-third-level}{%
-\subsubsection{Headings: third level}\label{headings-third-level}}
-
-Another paragraph.
-
-\hypertarget{examples-of-citations-figures-tables-references}{%
-\section{Examples of citations, figures, tables,
-references}\label{examples-of-citations-figures-tables-references}}
-
-\label{sec:others}
-
-You can insert references. Here is some text (Kour and Saabne 2014b,
-2014a) and see Hadash et al. (2018).
-
-The documentation for \verb+natbib+ may be found at
-
-You can use custom blocks with LaTeX support from \textbf{rmarkdown} to
-create environment.
-
-\begin{center}
-\url{http://mirrors.ctan.org/macros/latex/contrib/natbib/natnotes.pdf\%7D}
-
-\end{center}
-
-Of note is the command \verb+\citet+, which produces citations
-appropriate for use in inline text.
-
-You can insert LaTeX environment directly too.
-
-\begin{verbatim}
-   \citet{hasselmo} investigated\dots
-\end{verbatim}
-
-produces
-
-\begin{quote}
-  Hasselmo, et al.\ (1995) investigated\dots
-\end{quote}
-
-\begin{center}
-  \url{https://www.ctan.org/pkg/booktabs}
-\end{center}
-
-\hypertarget{figures}{%
-\subsection{Figures}\label{figures}}
-
-You can insert figure using LaTeX directly.
-
-See Figure \ref{fig:fig1}. Here is how you add footnotes. {[}\^{}Sample
-of the first footnote.{]}
-
-\begin{figure}
-  \centering
-  \fbox{\rule[-.5cm]{4cm}{4cm} \rule[-.5cm]{4cm}{0cm}}
-  \caption{Sample figure caption.}
-  \label{fig:fig1}
-\end{figure}
-
-But you can also do that using R.
-
-\begin{Shaded}
-\begin{Highlighting}[]
-\FunctionTok{plot}\NormalTok{(mtcars}\SpecialCharTok{$}\NormalTok{mpg)}
-\end{Highlighting}
-\end{Shaded}
-
-\begin{figure}
-\centering
-\includegraphics{FinalReport_Data622_files/figure-latex/fig2-1.pdf}
-\caption{Another sample figure}
-\end{figure}
-
-You can use \textbf{bookdown} to allow references for Tables and
-Figures.
-
-\hypertarget{tables}{%
-\subsection{Tables}\label{tables}}
-
-Below we can see how to use tables.
-
-See awesome Table\textasciitilde{}\ref{tab:table} which is written
-directly in LaTeX in source Rmd file.
-
-\begin{table}
- \caption{Sample table title}
-  \centering
-  \begin{tabular}{lll}
-    \toprule
-    \multicolumn{2}{c}{Part}                   \\
-    \cmidrule(r){1-2}
-    Name     & Description     & Size ($\mu$m) \\
-    \midrule
-    Dendrite & Input terminal  & $\sim$100     \\
-    Axon     & Output terminal & $\sim$10      \\
-    Soma     & Cell body       & up to $10^6$  \\
-    \bottomrule
-  \end{tabular}
-  \label{tab:table}
-\end{table}
-
-You can also use R code for that.
-
-\begin{Shaded}
-\begin{Highlighting}[]
-\NormalTok{knitr}\SpecialCharTok{::}\FunctionTok{kable}\NormalTok{(}\FunctionTok{head}\NormalTok{(mtcars), }\AttributeTok{caption =} \StringTok{"Head of mtcars table"}\NormalTok{)}
-\end{Highlighting}
-\end{Shaded}
-
-\begin{longtable}[]{@{}lrrrrrrrrrrr@{}}
-\caption{Head of mtcars table}\tabularnewline
-\toprule
-& mpg & cyl & disp & hp & drat & wt & qsec & vs & am & gear &
-carb\tabularnewline
-\midrule
-\endfirsthead
-\toprule
-& mpg & cyl & disp & hp & drat & wt & qsec & vs & am & gear &
-carb\tabularnewline
-\midrule
-\endhead
-Mazda RX4 & 21.0 & 6 & 160 & 110 & 3.90 & 2.620 & 16.46 & 0 & 1 & 4 &
-4\tabularnewline
-Mazda RX4 Wag & 21.0 & 6 & 160 & 110 & 3.90 & 2.875 & 17.02 & 0 & 1 & 4
-& 4\tabularnewline
-Datsun 710 & 22.8 & 4 & 108 & 93 & 3.85 & 2.320 & 18.61 & 1 & 1 & 4 &
-1\tabularnewline
-Hornet 4 Drive & 21.4 & 6 & 258 & 110 & 3.08 & 3.215 & 19.44 & 1 & 0 & 3
-& 1\tabularnewline
-Hornet Sportabout & 18.7 & 8 & 360 & 175 & 3.15 & 3.440 & 17.02 & 0 & 0
-& 3 & 2\tabularnewline
-Valiant & 18.1 & 6 & 225 & 105 & 2.76 & 3.460 & 20.22 & 1 & 0 & 3 &
-1\tabularnewline
-\bottomrule
-\end{longtable}
-
-\hypertarget{lists}{%
-\subsection{Lists}\label{lists}}
-
-\begin{itemize}
-\tightlist
-\item
-  Item 1
-\item
-  Item 2
-\item
-  Item 3
-\end{itemize}
+\hypertarget{report-directions}{%
+\section{Report Directions}\label{report-directions}}
 
 In your report, be sure to:
 
@@ -522,23 +647,6 @@ In your report, be sure to:
 
 \hypertarget{refs}{}
 \begin{CSLReferences}{1}{0}
-\leavevmode\hypertarget{ref-hadash2018estimate}{}%
-Hadash, Guy, Einat Kermany, Boaz Carmeli, Ofer Lavi, George Kour, and
-Alon Jacovi. 2018. {``Estimate and Replace: A Novel Approach to
-Integrating Deep Neural Networks with Existing Applications.''}
-\emph{arXiv Preprint arXiv:1804.09028}.
-
-\leavevmode\hypertarget{ref-kour2014fast}{}%
-Kour, George, and Raid Saabne. 2014a. {``Fast Classification of
-Handwritten on-Line Arabic Characters.''} In \emph{Soft Computing and
-Pattern Recognition (SoCPaR), 2014 6th International Conference of},
-312--18. IEEE.
-
-\leavevmode\hypertarget{ref-kour2014real}{}%
----------. 2014b. {``Real-Time Segmentation of on-Line Handwritten
-Arabic Script.''} In \emph{Frontiers in Handwriting Recognition (ICFHR),
-2014 14th International Conference on}, 417--22. IEEE.
-
 \leavevmode\hypertarget{ref-krizhevsky2009learning}{}%
 Krizhevsky, Alex, Geoffrey Hinton, and others. 2009. {``Learning
 Multiple Layers of Features from Tiny Images.''}
