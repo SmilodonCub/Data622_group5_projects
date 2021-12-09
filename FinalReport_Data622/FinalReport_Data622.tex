@@ -46,46 +46,6 @@ fashion MNIST}
   \texttt{\href{mailto:leo.yi35@spsmail.cuny.edu}{\nolinkurl{leo.yi35@spsmail.cuny.edu}}} \\
   }
 
-\usepackage{color}
-\usepackage{fancyvrb}
-\newcommand{\VerbBar}{|}
-\newcommand{\VERB}{\Verb[commandchars=\\\{\}]}
-\DefineVerbatimEnvironment{Highlighting}{Verbatim}{commandchars=\\\{\}}
-% Add ',fontsize=\small' for more characters per line
-\usepackage{framed}
-\definecolor{shadecolor}{RGB}{248,248,248}
-\newenvironment{Shaded}{\begin{snugshade}}{\end{snugshade}}
-\newcommand{\AlertTok}[1]{\textcolor[rgb]{0.94,0.16,0.16}{#1}}
-\newcommand{\AnnotationTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{\textbf{\textit{#1}}}}
-\newcommand{\AttributeTok}[1]{\textcolor[rgb]{0.77,0.63,0.00}{#1}}
-\newcommand{\BaseNTok}[1]{\textcolor[rgb]{0.00,0.00,0.81}{#1}}
-\newcommand{\BuiltInTok}[1]{#1}
-\newcommand{\CharTok}[1]{\textcolor[rgb]{0.31,0.60,0.02}{#1}}
-\newcommand{\CommentTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{\textit{#1}}}
-\newcommand{\CommentVarTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{\textbf{\textit{#1}}}}
-\newcommand{\ConstantTok}[1]{\textcolor[rgb]{0.00,0.00,0.00}{#1}}
-\newcommand{\ControlFlowTok}[1]{\textcolor[rgb]{0.13,0.29,0.53}{\textbf{#1}}}
-\newcommand{\DataTypeTok}[1]{\textcolor[rgb]{0.13,0.29,0.53}{#1}}
-\newcommand{\DecValTok}[1]{\textcolor[rgb]{0.00,0.00,0.81}{#1}}
-\newcommand{\DocumentationTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{\textbf{\textit{#1}}}}
-\newcommand{\ErrorTok}[1]{\textcolor[rgb]{0.64,0.00,0.00}{\textbf{#1}}}
-\newcommand{\ExtensionTok}[1]{#1}
-\newcommand{\FloatTok}[1]{\textcolor[rgb]{0.00,0.00,0.81}{#1}}
-\newcommand{\FunctionTok}[1]{\textcolor[rgb]{0.00,0.00,0.00}{#1}}
-\newcommand{\ImportTok}[1]{#1}
-\newcommand{\InformationTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{\textbf{\textit{#1}}}}
-\newcommand{\KeywordTok}[1]{\textcolor[rgb]{0.13,0.29,0.53}{\textbf{#1}}}
-\newcommand{\NormalTok}[1]{#1}
-\newcommand{\OperatorTok}[1]{\textcolor[rgb]{0.81,0.36,0.00}{\textbf{#1}}}
-\newcommand{\OtherTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{#1}}
-\newcommand{\PreprocessorTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{\textit{#1}}}
-\newcommand{\RegionMarkerTok}[1]{#1}
-\newcommand{\SpecialCharTok}[1]{\textcolor[rgb]{0.00,0.00,0.00}{#1}}
-\newcommand{\SpecialStringTok}[1]{\textcolor[rgb]{0.31,0.60,0.02}{#1}}
-\newcommand{\StringTok}[1]{\textcolor[rgb]{0.31,0.60,0.02}{#1}}
-\newcommand{\VariableTok}[1]{\textcolor[rgb]{0.00,0.00,0.00}{#1}}
-\newcommand{\VerbatimStringTok}[1]{\textcolor[rgb]{0.31,0.60,0.02}{#1}}
-\newcommand{\WarningTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{\textbf{\textit{#1}}}}
 
 
 % Pandoc citation processing
@@ -131,9 +91,11 @@ Data622: Machine Learning and Big Data, an elective course for the
 Masters of Science in Data Science at CUNY School of Professional
 Studies. We explore approaches to reduce the dimensionality of the data
 by engineering new descriptive features and performing Principal
-Components Analysis. We then follow this up with machine learning
-methods for classification such as Support Vector Machine and a
-Convolutional Neural Network. We find that
+Components Analysis. We follow this up with machine learning methods for
+classification such as k-Nearest Neighbor, Support Vector Machine,
+Convolutional Neural Network and more. We find that dimensionality
+reduction can be a powerful tool for speeding up the training of a model
+while still delivering comparable accuracy on classification tasks.
 \end{abstract}
 
 \keywords{
@@ -183,9 +145,9 @@ In this report we utilize Fashion MNIST to implement a variety of
 machine learning approaches covered over the course of our studies in
 Data622: Machine Learning and Big Data as part of the Masters of Data
 Science program at CUNY School of Professional Studies. Our goal is to
-optimize the classification of Fashion MNIST images using a variety of
-machine learning algorithms. Here, we describe our approaches and
-compare classification model performance.
+use dimensionality reduction to optimize the classification of Fashion
+MNIST images using a variety of machine learning algorithms. Here, we
+describe our approaches and compare classification model performance.
 
 With an image size of 28 x 28, Fashion MNIST images, in their raw form,
 are high dimensional data with a total of 784 features. Additionally,
@@ -211,9 +173,13 @@ are pixels with both low mean values (light) and low standard deviation
 either consistently low or high values are of low information content
 and would not contribute much to models for image classification if used
 as features. Therefore, we describe two methods for reducing the
-dimensionality of the Fashion-MNIST dataset. Furthermore, this report
-goes on to describe multiple different models developed from the
-resulting reduced sets and evaluate the performances.
+dimensionality of the Fashion-MNIST dataset. First, we describe a
+Feature Engineering approach where we build summary features that
+quantify distinctions between categorical images. Second, we describe a
+dimensionality reduction approach that uses Principal Component
+Analysis. Furthermore, this report goes on to describe multiple
+different models developed from the resulting reduced sets and evaluate
+the performances.
 
 \begin{figure}
 
@@ -296,7 +262,7 @@ Below is a description of the engineered feature set:
   non-white as well as percent light grey (1 - 122).
 \end{itemize}
 
-The features listed were determined by visually analyzing the Figure 3.
+The features listed were determined by visually inspecting Figure 3.
 Moving forward in this report, this feature set will be referred to as
 the Feature Engineered dataset. For detailed code that describes the
 feature generation, please refer to the report code documentation.
@@ -355,7 +321,7 @@ especially since all modeling procedures using the Engineered Feature
 dataset we used a subset of \textasciitilde10,000 training instances.
 Despite the long training, the radial SVM model performed the best by
 scoring the highest accuracy on the test data. However, the Random
-Forest model achieved a comparable test accuracy. Therefore, if a long
+Forest model achieved a comparable test accuracy. Therefore, if long
 training durations are of concern, the Ransom Forest model is a
 reasonable alternative.
 
@@ -423,12 +389,13 @@ necessary to train models.
 \caption{PCA Results. The Skree plot (Left) shows the proportion on explained variance for each the first 20 principal components. The Cumulative Explained Variance plot (Right) shows the total variance explained by successively addding up to 200 principal components}\label{fig:unnamed-chunk-5}
 \end{figure}
 
-From the skree plot, we can see a very sharp drop off in the proportion
-of explained variance. Principal Components greater than 12 account for
-less than 1\% of the dataset's variance. The first 12 components only
-account for a cumulative variance of 0.74, therefore it takes the
-combined contribution of many more components (187 components) to
-explain 95\% of the variance of each pixel for the original images.
+From the skree plot in Figure 5 (left panel), we can see a very sharp
+drop off in the proportion of explained variance. Principal Components
+greater than 12 account for less than 1\% of the dataset's variance. The
+first 12 components only account for a cumulative variance of 0.74,
+therefore, as the right panel in Figure 5 shows, it takes the combined
+contribution of many more components (187 components) to explain 95\% of
+the variance of each pixel for the original images.
 
 \begin{figure}
 
@@ -439,25 +406,21 @@ explain 95\% of the variance of each pixel for the original images.
 \caption{Visualizing PCA Components. The top row (from left to right) and bottom left panel visualize principal components 1 through 4. The middle panel of the bottom row shows the 392th component. The bottom right panels shows principal component 784}\label{fig:unnamed-chunk-6}
 \end{figure}
 
-PCA returns a components for every dimension of the data in descending
-order of the amount of variance accounted for. The figure above shows
-the the first 4 components, component PC392 (middle), and the last
-component PC784. As already depicted in the Skree and Cumulative
-Explained Variance plots, the first four components explain 0.58\%
-variance from PC1: 22.1\% \(\rightarrow\) PC2: 5.1\% variance. We can
-see clearly from the visualization of the components that the first
-several PCs are clearly discriminating between clothing classifications.
-For instance, PC1 distinguishes between T-shirt/top \& Pullover
-(dark/high values) and shoe categories (light/low values). On the other
-hand, PC2 appears to distinguish Trousers from shoe categories. The
-representation become less clear as the explained variance decreases.
-For instance, PC392 and PC784 only explain 0.01\% and 0.001\% variance
-respectively and it is not clear from the visualization just what
-information these components represent.
-
-PC1 and PC2 account for roughly half (0.47) of the train dataset's
-variance. We can visualize the projections of the train data onto the
-features space of these two components:
+PCA returns a component for every dimension of the data in descending
+order of the amount of variance accounted for. Figure 6 shows the the
+first 4 components, component PC392 (middle), and the last component
+PC784. As already depicted in the Skree and Cumulative Explained
+Variance plots of Figure 5, the first four components explain 0.58\%
+variance from PC1: 29\% \(\rightarrow\) PC4: \textasciitilde5\%
+variance. We can see clearly from the visualization of the components
+that the first several PCs are clearly discriminating between clothing
+classifications. For instance, PC1 distinguishes between T-shirt/top \&
+Pullover (dark/high values) and shoe categories (light/low values). On
+the other hand, PC2 appears to distinguish Trousers from shoe
+categories. The representation becomes less clear as the explained
+variance decreases. For instance, PC392 and PC784 only explain 0.01\%
+and 0.001\% variance respectively and it is not clear from the
+visualization just what information these components represent.
 
 \begin{figure}
 
@@ -468,22 +431,22 @@ features space of these two components:
 \caption{Magnitudes of PCA 1 and 2 for all Fashion-MNIST images from the 'train' dataset. Datapoints are shaded according the clothing category. A black text label is rendered at the mean PC1 and PC2 values for each category.}\label{fig:unnamed-chunk-7}
 \end{figure}
 
-The figure above shows the representations of the \texttt{train} images
-in the feature space of the first 2 dimensions. Each clothing item
-category is represented by a different color. For clarity, a text label
-(in black) which corresponds to the categorical mean values of PC1 \&
-PC2 has been added. We can see that there is noticeable separation
-across the categories. Additionally, we see some clustering of category
-means that meets expectations. For example, the shoe categories (Sandal,
-Sneaker and Ankle Boot) group together towards the lower left hand
-corner of the figure. Clothing items that could all be described as tops
-with sleeves ( Pullover, Coat, Shirt \& T-shirt/top) group together in
-the middle of the distribution. Trousers, on the other hand, have a
-noticeable distance from tops with sleeves but ar contiguous with the
-dress category which shares roughly vertical rectangular profile.
-
-Here we find the representation onto the first 187 components which were
-shown earlier to account for 95\% of the variance in the image data:
+PC1 and PC2 account for roughly half (\textasciitilde47\%) of the train
+dataset's variance. Figure 6 visualizes the projections of the train
+data onto the features space of these two components. Figure 6 shows
+representations of the \texttt{train} images in the feature space of the
+first 2 dimensions. Each clothing item category is represented by a
+different color. For clarity, a text label (in black) which corresponds
+to the categorical mean values of PC1 \& PC2 has been added. We can see
+that there is noticeable separation across the categories. Additionally,
+we see some clustering of category means that meets expectations. For
+example, the shoe categories (Sandal, Sneaker and Ankle Boot) group
+together towards the lower left hand corner of the figure. Clothing
+items that could all be described as tops with sleeves ( Pullover, Coat,
+Shirt \& T-shirt/top) group together in the middle of the distribution.
+Trousers, on the other hand, have a noticeable distance from tops with
+sleeves but are contiguous with the dress category which shares a
+roughly vertical rectangular profile.
 
 \begin{figure}
 
@@ -494,33 +457,35 @@ shown earlier to account for 95\% of the variance in the image data:
 \caption{Reconstructed Images using 187 Principal Components. Original Fashion-MNIST images are rendered next to the corresponding compressed images which are reconstructed from the first 187 components}\label{fig:unnamed-chunk-8}
 \end{figure}
 
-Truncating the data to 187 components does result in information loss,
-however, as we can see from the visualizations above, the images retain
-much of the detail from the original images while using a feature space
-23.85\% the size of the original.
+Figure 8 shows the representation of the data onto the first 187
+components which were shown earlier to account for 95\% of the variance
+in the image data. The result are information compressed versions of the
+original images. Truncating the data to 187 components does result in
+information loss, however, as we can see from the visualizations, the
+images retain much of the detail from the original images while using a
+feature space 23.85\% the size of the original.
 
 PCA is a dimensionality reduction method that can be applied to high
 dimensional datasets. PCA reduces the number of features while
 preserving as much variance from the data as possible. Here we used PCA
 to reduce the number of features of the Fashion MNIST dataset from 784
 to 187. We showed through a series of visualizations that transforming
-the images to the reduced feature space does so with an noticeable loss
+the images to the reduced feature space does so with a noticeable loss
 to image quality, however the gist of the images are still present.
 
-\hypertarget{modeling-fashion-mnist-with-and-without-the-use-of-pca-compression-k-nearest-neighbors-svm}{%
+\hypertarget{modeling-fashion-mnist-with-and-without-the-use-of-pca-compression-k-nearest-neighbors}{%
 \subsection{Modeling Fashion-MNIST with and without the use of PCA
-Compression: k-Nearest Neighbors \&
-SVM}\label{modeling-fashion-mnist-with-and-without-the-use-of-pca-compression-k-nearest-neighbors-svm}}
+Compression: k-Nearest
+Neighbors}\label{modeling-fashion-mnist-with-and-without-the-use-of-pca-compression-k-nearest-neighbors}}
 
 In the previous section, we showed that PCA can be used on Fashion-MNIST
 to reduce the dimensionality of the data to less than \(\frac{1}{4}th\)
-the original size. Here we implement Support Vector Machine and
-k-Nearest Neighbor, both non-parametric methods, to classify
-Fashion-MNIST images using both the original data which uses all 784
-columns of pixel values as features and the PCA compressed data which
-reduces the feature space the 187 columns. As in other analyses in the
-report, these models will also be `trained' on a subset of 10000
-samples, both to reduce training times.
+the original size. Here we implement k-Nearest Neighbor, a
+non-parametric method, to classify Fashion-MNIST images using both the
+original data which uses all 784 columns of pixel values as features and
+the PCA compressed data which reduces the feature space the 187 columns.
+As in other analyses in the report, these models will also be `trained'
+on a subset of 10000 samples, to reduce training times.
 
 K-Nearest Neighbors (kNN) is a non-parametric technique that can be used
 for image classification. It's a very simple technique, wherin new
@@ -530,100 +495,298 @@ being said, kNN doesn't actually train, rather, it stores the data and
 refers back to it when making classifications. For our analysis, the
 \texttt{caret} package was used to create this model, and although it
 may appear like it's fitting a model, what it's actually doing here is
-storing all the training data, then trying out different `'k values, one
-of which it will choose to use when 'predict' is called. Even if it's
+storing all the training data, then trying out different `k' values, one
+of which it will choose to use when `predict' is called. Even if it's
 not semantically well implemented, it's still very useful for finding a
 good `k' value.
 
-\begin{Shaded}
-\begin{Highlighting}[]
-\CommentTok{\#Validation accuracy for different values of k }
-\CommentTok{\#plot(knn.fit)}
-\end{Highlighting}
-\end{Shaded}
+\begin{figure}
+
+{\centering \includegraphics[width=0.9\linewidth]{/home/bonzilla/Documents/MSDS/Data622_group5_projects/FinalReport_Data622/obiwan} 
+
+}
+
+\caption{kNN: hyperparameter tuning curve to find the best k value for the original Fashion-MNIST data}\label{fig:unnamed-chunk-9}
+\end{figure}
 
 We begin by fitting a kNN model to the original Fashion-MNIST dataset.
-Although this analysis starts with all 784 features, whittle down some
-of the data by choosing only variables (pixels) which vary significantly
-between images. For example, if a pixel in the corner of the images has
-the same value throughout most images, this pixel will dropped from the
-data and not be used in fitting model. For full details and code, please
-refer to the report code documentation. Figure XXXX shows the
-cross-validation accuracies across several values of `k.' This plot give
-the hyperparameter tuning curve for the model. We see that k=5 performed
-as the best value with the training data.
+Although this analysis starts with all 784 features, we whittle down
+some of the data by choosing only variables (pixels) which vary
+significantly between images. For example, if a pixel in the corner of
+the images has the same value throughout most images, this pixel will
+dropped from the data and not be used in fitting model. For full details
+and code, please refer to the report code documentation. Figure 9 shows
+the cross-validation accuracy across several values of `k' while
+training the model with the \texttt{train} subset of the data. This plot
+gives the hyperparameter tuning curve for the model. We see that k=5
+performed as the best value with the training data.
 
 With k=5, we evaluated the model performance for classifying the test
 data. The overall accuracy for this model was 81.33\% (95\% CI: 80.57 -
-82.09\%). The confusion matrix (see report code documentation) shows
-that the model has an easier time detecting some labels than others. For
-example, it correctly classifies most of the sneakers (label 7), bags
-(8), ankle-boots (9), and trousers (1). However, it has a much harder
-time classifying pullovers (2), coats (4), sandals (5), and shirts (6).
-Shirts in particular fared poorly, with only about half correctly
-classified; t-shirts/tops (0), pullovers (2), and coats (4) were also
-often missclassified as shirts, which makes sense (they are very
-similar).
+82.09\%). The confusion matrix (see report code documentation) informed
+us that the model has an easier time detecting some labels than others.
+For example, it correctly classifies most of the sneakers (label 7),
+bags (8), ankle-boots (9), and trousers (1). However, it has a much
+harder time classifying pullovers (2), coats (4), sandals (5), and
+shirts (6). Shirts in particular fared poorly, with only about half
+correctly classified; t-shirts/tops (0), pullovers (2), and coats (4)
+were also often missclassified as shirts, which makes sense (they are
+very similar).
 
-PCA kNN Now we'll try kNN with the PCA compressed data, and see if it
-has any effect on performance when compared to the previous model. When
-`fit' on a sample of 10,000 samples, a k value of 7 appears to perform
-best during cross-validation. The cross-validation accuracies across k
-values of 1-11 were similar; below, this is plotted.
+Next we will implement kNN with the PCA compressed data, and see if it
+has any effect on performance when compared to the previous model.
+Figure 10 shows the hyperparameter tuning curve used to find the best
+value of `k.' When kNN is fit on a subset of 10,000 samples from the PCA
+reduced feature space, a k value of 7 appears to perform best during
+cross-validation. The cross-validation accuracies across k values of
+1-11 were similar; see Figure 10.
 
-\begin{Shaded}
-\begin{Highlighting}[]
-\CommentTok{\# plot(knn.pca.fit)}
-\end{Highlighting}
-\end{Shaded}
+\begin{figure}
 
-The changes in accuracy avross different values of k (above) aren't
+{\centering \includegraphics[width=0.9\linewidth]{/home/bonzilla/Documents/MSDS/Data622_group5_projects/FinalReport_Data622/obiwan} 
+
+}
+
+\caption{kNN: hyperparameter tuning curve to find the best k value for the PCA compressed Fashion-MNIST feature space}\label{fig:unnamed-chunk-10}
+\end{figure}
+
+The changes in accuracy across different values of k (Figure 10) aren't
 terribly drastic. K values of 5-7 performed best across all tested
-values (not all included above).\\
-Let's try it out on the test set now. The overall accuracy of this model
-was 82.36\% (95\% CI: 81.61 - 83.11\%). It performed very similarly to
-the previous model which used a non-pca compressed dataset. We can see
-similar patterns in the confusion matrix:most of the sneakers (label 7),
-bags (8), ankle-boots (9), and trousers (1) where correctly classified.
-Also, it had a harder time classifying pullovers (2), coats (4), sandals
-(5), and shirts (6). We also see similar missclasifications to the other
-set, where shirt classification is poo, and t-shirts/tops (0), pullovers
-(2), and coats (4) were often missclassified as shirts. Similar to wat
-we saw with the SVM models, the PCA compressed kNN model actually
-performs slightly better than the regular kNN model (82.35\% vs 81.23\%
-overall accuracy; a significant difference at \(\alpha = 0.05\)). It's
-unclear why this happens. One could theorize that perhaps the removing
-some of the percision in the data may make for more robust models that
-resist over-fitting. It could also be seperating the data a bit better,
-which both SVM and kNN would benefit from significanly.
+values when fit with the training subset of data. Next we evaluate
+performance on the test set. The overall accuracy of this model was
+82.36\% (95\% CI: 81.61 - 83.11\%). It performed very similarly to the
+previous model which used a non-PCA compressed dataset. We can see
+similar patterns in the confusion matrix (see report code
+documentation): most of the sneakers (label 7), bags (8), ankle-boots
+(9), and trousers (1) where correctly classified. Also, the model had a
+harder time classifying pullovers (2), coats (4), sandals (5), and
+shirts (6). We also see similar missclasifications to the results from
+the original feature space, where shirt classification is poo, and
+t-shirts/tops (0), pullovers (2), and coats (4) were often
+missclassified as shirts.
+
+The PCA compressed kNN model performs slightly better than the kNN model
+trained with the original feature space (82.35\% vs 81.23\% overall
+accuracy; a significant difference at \(\alpha = 0.05\)). It's unclear
+why this happens. One could theorize that perhaps the removing some of
+the precision in the data may make for more robust models that resist
+over-fitting. It could also be that the data is more separable in a
+smaller feature space, which kNN would benefit from significantly.
 
 \hypertarget{modeling-fashion-mnist-using-pca-compression-additional-machine-learning-models}{%
 \subsection{Modeling Fashion-MNIST using PCA Compression: Additional
 Machine Learning
 Models}\label{modeling-fashion-mnist-using-pca-compression-additional-machine-learning-models}}
 
-PCA is a dimensionality reduction method that can be applied to high
-dimensional datasets. PCA reduces the number of features while
-preserving as much variance from the data as possible. Here we used PCA
-to reduce the number of features of the Fashion MNIST dataset from 784
-to 187. We showed through a series of visualizations that transforming
-the images to the reduced feature space does so with an noticeable loss
-to image quality, however the gist of the images is still present.
-Furthermore, we used SVM model fits to evaluate performance with the
-reduced dimension PCA version of Fashion MNIST. A radial SVM classifier
-was trained on a subset of 10,000 images for both the full-featured set
-and the PCA-compressed set. The PCA-compressed model trained
-approximately 1 minute and 20seconds faster than the full-featured data.
-En face, this does difference does not sound appreciable. However,
-considering that training time for SVM scales quadratically with dataset
-size, one would expect to see noticeable improvements in performance had
-the entire \texttt{train} set been used for model training. Furthermore,
-we evaluated the classification accuracy and found that the
-PCA-compressed SVM model had a higher prediction accuracy on the test
-data. In conclusion, use of the PCA compressed dataset would be
-beneficial in down-stream modeling analysis. As a detraction, additional
-steps would be necessary to transform the data between full and
-compressed feature spaces to facilitate model interpretation.
+Using the PCA compressed feature space, three additional model
+approaches were trained, and quality of predictions was evaluated. For
+each model, hyperparamters were tuned using 10-fold-cross-validation on
+the training set to find the combination that maximized Accuracy. Due to
+the large number of observations in the Fashion MNIST training set, only
+the first 10,000 observation were used due to insufficient computing
+power. Here we provide a summary of the implementation for Stochastic
+Gradient Boosting, Random Forest and a Neural Network model and evaluate
+each models performance towards classification of PCA compressed
+Fashion-MNIST. For details and code, please refer to the report code
+documentation.
+
+\hypertarget{stochastic-gradient-boosting}{%
+\paragraph{1. Stochastic Gradient
+Boosting}\label{stochastic-gradient-boosting}}
+
+Gradient boosting is an ensemble machine learning technique that has
+application in both regression and classification, and is typically used
+in decision trees. It is premised on building a sequence of weak models
+where at each iteration a new tree fits the errors from the previous.
+For this application, a stochastic gradient boosting (SGB) model will be
+used. In SGB, a random subsample (without replacement) of variables is
+used at each iteration so that correlation between successive trees is
+reduced. Successive trees leverage this randomness to update errors of
+the base.
+
+There are four hyperparameters that are to be tuned for this model, and
+a brief description of each is provided as well as the values that were
+supplied to the grid for cross validation purposes of the model tuning
+effort:
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  \emph{Number of trees (n.trees):} This refers to the total number of
+  trees to be used in the ensemble. Too many trees can result in
+  overfitting while too few trees can result in underfitting due to the
+  corrective, iterative nature of the algorithm where successive tree's
+  correct the errors at the previous step. Values from 500 to 2500 by
+  500 were tested during cross validation.
+\item
+  \emph{Interaction depth (interaction.depth)}: Controls the depth of
+  the individual trees and subset of random variables at each iteration
+  step. Higher depth trees allows capturing of predictor interactions
+  but could also result in over-fitting. Values from 1 to 7 by 2 were
+  tested.
+\item
+  \emph{Learning rate (shrinkage)}: This parameter sets the rate at
+  which a tree learns from the base learner. Smaller rates learn less
+  quickly thus reducing the chances of overfitting but will require a
+  larger number of trees and computation power. Values 0.01, and 0.1
+  were tested.
+\item
+  \emph{Minimum number of observations in terminal nodes
+  (n.minobsinnode)}: Like interaction depth, this also controls the
+  complexity of each tree. Values of 1, 2, and 5 were tested.
+\end{enumerate}
+
+\begin{itemize}
+\tightlist
+\item
+  The final values used for the model were n.trees = 2000,
+  interaction.depth = 5, shrinkage = 0.01 and n.minobsinnode = 1
+\end{itemize}
+
+\hypertarget{random-forest}{%
+\paragraph{2. Random Forest}\label{random-forest}}
+
+Random forest is an ensemble decision tree method where a series of
+decision trees independent from each other are provided a random subset
+of the predictor space. The results of each bootstrapped iteration are
+then given an aggregated response. There is only one hyperparameter for
+the \texttt{rf} implementation of the random forest algorithm that was
+used.
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  \emph{Number of variables (mtry):} This defines the manner in which
+  variable bootstrapping is conducted by controlling the maximum number
+  of variables that are subset at each interation of the ensemble.
+  Integer values from 1 to 6 inclusive were tested during cross
+  validation.
+\end{enumerate}
+
+The final value used for the model was mtry = 3.
+
+\hypertarget{neural-network}{%
+\paragraph{3. Neural Network}\label{neural-network}}
+
+A neural network based on averaging of random seeds, \texttt{avNNet} was
+trained. The following hyperparamters were tuned using cross-validation.
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  \emph{Number of hidden layers (size):} This defines the complexity of
+  the network
+\item
+  \emph{Decay:} penalty term for large coefficients; used to regularaize
+  model
+\end{enumerate}
+
+The final values used for the model were size = 12, decay = 0.01
+
+\begin{figure}
+
+{\centering \includegraphics[width=0.9\linewidth]{/home/bonzilla/Documents/MSDS/Data622_group5_projects/FinalReport_Data622/rw_mods} 
+
+}
+
+\caption{Model Performance Metrics. Top Panels: overall model Accuracy (left) and Cohen's Kappa Statistic (right). Lower Panels: Model Accuracy and Sensitivity for each Fashion-MNIST categorical label}\label{fig:unnamed-chunk-11}
+\end{figure}
+
+We can gain a high-level overview of the model based on the metrics
+Accuracy and Cohen's Kappa. Accuracy describes how often the classifier
+was correct, and is defined as the sum of true positive and true
+negatives divided by the total number of observations. This was
+determined to be an appropriate metric to evaluate overall model
+performance since the test set classes are balanced. The Cohen's Kappa
+statistic is a measure of how well the model prediction matched the
+labeled test set, while controlling for the accuracy that would have
+been produced by a random classifier. As a stand alone metric, kappa can
+be difficult to interpret, but is useful for between model comparisons.
+The top panel of Figure 11 shows the Accuracy (left) and Kappa (right)
+performance metrics for the three models. We see that the Random Forest
+model performed the best.
+
+The bottom panel of Figure 11 considers the performance of each of the
+three models when the Fashion-MNIST classification label is taken into
+account. We used the classification accuracy and sensitivity (the true
+positive rate) as metrics to evaluate performance. In Figure 11, we can
+see that for each category for both Accuracy and Sensitivity, the Random
+Forest model outperforms both the Stochastic Gradient Descent and the
+Neural Network models.
+
+Accuracy and Sensitivity are calculated from the results of the
+confusion matrices that result from evaluating each model's
+classification results. Figure 12 shows the confusion matrices for the
+three models; it is very interesting to see that the three models show
+very similar patterns in classification. For example, all three models
+struggle to accurately classify the `Shirt' category. `Pullovers' and
+`Coats' are very commonly misclassified as eachother.
+
+\begin{figure}
+
+{\centering \includegraphics[width=0.9\linewidth]{/home/bonzilla/Documents/MSDS/Data622_group5_projects/FinalReport_Data622/rw_cm} 
+
+}
+
+\caption{kNN: hyperparameter tuning curve to find the best k value for the PCA compressed Fashion-MNIST feature space}\label{fig:unnamed-chunk-12}
+\end{figure}
+
+\hypertarget{summary-conclusions}{%
+\section{Summary \& Conclusions}\label{summary-conclusions}}
+
+In this report we described two different approaches to implementing
+dimensionality reduction of the Fashion-MNIST dataset. Our first
+approach outlined a strategy to engineer features that draw from
+insights gained from visually inspecting patterns in the data. We
+referred to this approach as our Feature Engineered Dataset which
+reduced the dimensionality from 784 features (pixels) to
+\textasciitilde80 features. We evaluated the performance of multiple
+models(Random Forest, SVM, kNN, Multinomial Logisitc Regression and
+Naive Bayes) and found that a Radial SVM model performed the best.
+However, Radial SVM had the longest training time
+(\textasciitilde19minutes) and considering that SVM scales quadratically
+with the size of a given dataset, this runtime might be prohibitive for
+some users. Alternatively, the Random Forest achieved comparable
+accuracy on classifying the test data and trained in a fraction of SVM's
+training duration, so there is that to be considered.
+
+For our second dimensionality reduction approach, we applied Principal
+Component Analysis to the Fashion-MNIST dataset. PCA reduces the number
+of features while preserving as much variance from the data as possible.
+Here we used PCA to reduce the number of features of the Fashion MNIST
+dataset from 784 to 187 while still representing 95\% of the original
+data's variance. We showed through a series of visualizations that
+transforming the images to the reduced feature space does so with an
+noticeable loss to image quality, however the gist of the images is
+still present.
+
+We then compared the classification performance of k-Nearest Neighbors
+models when using the original Fashion-MNIST data and the PCA reduced
+data. The PCA compressed kNN model performs slightly better than the kNN
+model trained with the original feature space (82.35\% vs 81.23\%
+overall accuracy; a significant difference at \(\alpha = 0.05\)). We
+hypothesize that this could possible be because the reduced
+dimensionality makes the data observations more highly seperable. To
+pursue this further, we then evaluated the performance of several other
+machine learning algorithms (Stochastic Gradient Descent, Random Forest
+and a Neural Network model) for classification of the PCA reduced
+Fashion-MNIST dataset. Judging by the confusion matrices (Figure 12) we
+see that these models, although very different algorithms, make similar
+classification errors across the clothing categories. However, the
+performance of the Random Forest model stood out as the best classifier.
+
+In conclusion, we find the use of dimensionality reduction would be
+beneficial in down-stream modeling analysis when working with
+high-dimensional datasets. As a detraction, additional steps would be
+necessary to transform the data between full and compressed feature
+spaces to facilitate model interpretation. However, we feel that the
+results demonstrated in this report show that dimensionality reduction
+techniques can be done in a way that is beneficial for practical reasons
+(e.g.~training duration, computational demands) and has low impact on
+the accuracy of classification.
 
 \hypertarget{report-directions}{%
 \section{Report Directions}\label{report-directions}}
