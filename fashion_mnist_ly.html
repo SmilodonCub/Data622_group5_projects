@@ -11,7 +11,7 @@
 
 <meta name="author" content="leo" />
 
-<meta name="date" content="2021-12-07" />
+<meta name="date" content="2021-12-08" />
 
 <title>fashion_mnist_ly</title>
 
@@ -325,7 +325,7 @@ div.tocify {
 
 <h1 class="title toc-ignore">fashion_mnist_ly</h1>
 <h4 class="author">leo</h4>
-<h4 class="date">2021-12-07</h4>
+<h4 class="date">2021-12-08</h4>
 
 </div>
 
@@ -894,1210 +894,111 @@ mark {
 <li>Naive bayes</li>
 </ul>
 <p>The following models will be trained exclusively on the variables created in the earlier feature engineering section. Additionally, the training data will only use a fraction of the original training dataset in order to deal with the hardware limitations of personal computers. The training set used below is a stratified sample and accounts for 16.7% or 10,010 observations of the original training set.</p>
-<div class="sourceCode" id="cb11"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="co"># create new dataframes using only feature engineering variables</span></span>
-<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a><span class="co"># train3 &lt;- calculate_features(train2)</span></span>
-<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>test2 <span class="ot">&lt;-</span> <span class="fu">calculate_features</span>(test)</span>
-<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a><span class="co"># use a new training set, about 10k rows</span></span>
-<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">101</span>)</span>
-<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a>trainIndex <span class="ot">&lt;-</span> <span class="fu">createDataPartition</span>(train<span class="sc">$</span>label, <span class="at">p =</span> <span class="fl">0.167</span>, <span class="at">list =</span> F)</span>
-<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a>train3 <span class="ot">&lt;-</span> train[trainIndex,] <span class="sc">%&gt;%</span></span>
-<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a>  <span class="fu">calculate_features</span>()</span>
-<span id="cb11-10"><a href="#cb11-10" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-11"><a href="#cb11-11" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-12"><a href="#cb11-12" aria-hidden="true" tabindex="-1"></a><span class="co"># 10 fold cross validation</span></span>
-<span id="cb11-13"><a href="#cb11-13" aria-hidden="true" tabindex="-1"></a>ctrl <span class="ot">&lt;-</span> <span class="fu">trainControl</span>(<span class="at">method =</span> <span class="st">&#39;cv&#39;</span>, <span class="at">number =</span> <span class="dv">10</span>)</span>
+<div class="sourceCode" id="cb11"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="co"># this will determine if the models are retrained or if the stored files are referenced</span></span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>full_run <span class="ot">&lt;-</span> F</span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a><span class="co"># local path where models will be saved and loaded from</span></span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>model_path <span class="ot">&lt;-</span> <span class="st">&#39;C:/downloads/docs/data622/final/feature_engineering_models/&#39;</span></span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a>rf_path <span class="ot">&lt;-</span> <span class="fu">str_c</span>(model_path, <span class="st">&#39;fe_rf_mod.rds&#39;</span>)</span>
+<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a>svm_path <span class="ot">&lt;-</span> <span class="fu">str_c</span>(model_path, <span class="st">&#39;fe_svm_mod.rds&#39;</span>)</span>
+<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a>knn_path <span class="ot">&lt;-</span> <span class="fu">str_c</span>(model_path, <span class="st">&#39;fe_knn_mod.rds&#39;</span>)</span>
+<span id="cb11-10"><a href="#cb11-10" aria-hidden="true" tabindex="-1"></a>multinom_path <span class="ot">&lt;-</span> <span class="fu">str_c</span>(model_path, <span class="st">&#39;fe_multinom_mod.rds&#39;</span>)</span>
+<span id="cb11-11"><a href="#cb11-11" aria-hidden="true" tabindex="-1"></a>nb_path <span class="ot">&lt;-</span> <span class="fu">str_c</span>(model_path, <span class="st">&#39;fe_nb_mod.rds&#39;</span>)</span>
+<span id="cb11-12"><a href="#cb11-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-13"><a href="#cb11-13" aria-hidden="true" tabindex="-1"></a>duration_path <span class="ot">&lt;-</span> <span class="fu">str_c</span>(model_path, <span class="st">&#39;fe_run_duration.csv&#39;</span>)</span>
 <span id="cb11-14"><a href="#cb11-14" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-15"><a href="#cb11-15" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-16"><a href="#cb11-16" aria-hidden="true" tabindex="-1"></a><span class="co"># random forest</span></span>
-<span id="cb11-17"><a href="#cb11-17" aria-hidden="true" tabindex="-1"></a>mark_0 <span class="ot">&lt;-</span> <span class="fu">Sys.time</span>()</span>
-<span id="cb11-18"><a href="#cb11-18" aria-hidden="true" tabindex="-1"></a>  </span>
-<span id="cb11-19"><a href="#cb11-19" aria-hidden="true" tabindex="-1"></a>grid <span class="ot">&lt;-</span>  <span class="fu">expand.grid</span>(<span class="at">.mtry =</span> <span class="fu">sqrt</span>(<span class="fu">ncol</span>(train3)))  </span>
-<span id="cb11-20"><a href="#cb11-20" aria-hidden="true" tabindex="-1"></a>rf <span class="ot">&lt;-</span> <span class="fu">train</span>(label <span class="sc">~</span> .,</span>
-<span id="cb11-21"><a href="#cb11-21" aria-hidden="true" tabindex="-1"></a>            <span class="at">data =</span> train3,</span>
-<span id="cb11-22"><a href="#cb11-22" aria-hidden="true" tabindex="-1"></a>            <span class="at">method =</span> <span class="st">&#39;rf&#39;</span>,</span>
-<span id="cb11-23"><a href="#cb11-23" aria-hidden="true" tabindex="-1"></a>            <span class="at">tuneGrid =</span> grid,</span>
-<span id="cb11-24"><a href="#cb11-24" aria-hidden="true" tabindex="-1"></a>            <span class="at">trControl =</span> ctrl</span>
-<span id="cb11-25"><a href="#cb11-25" aria-hidden="true" tabindex="-1"></a>            )</span>
-<span id="cb11-26"><a href="#cb11-26" aria-hidden="true" tabindex="-1"></a>  </span>
-<span id="cb11-27"><a href="#cb11-27" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-28"><a href="#cb11-28" aria-hidden="true" tabindex="-1"></a>mark_1 <span class="ot">&lt;-</span> <span class="fu">Sys.time</span>()</span>
-<span id="cb11-29"><a href="#cb11-29" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-30"><a href="#cb11-30" aria-hidden="true" tabindex="-1"></a><span class="co"># svm radial </span></span>
-<span id="cb11-31"><a href="#cb11-31" aria-hidden="true" tabindex="-1"></a>svm <span class="ot">&lt;-</span> <span class="fu">train</span>(label <span class="sc">~</span> .,</span>
-<span id="cb11-32"><a href="#cb11-32" aria-hidden="true" tabindex="-1"></a>             <span class="at">data =</span> train3,</span>
-<span id="cb11-33"><a href="#cb11-33" aria-hidden="true" tabindex="-1"></a>             <span class="at">method =</span> <span class="st">&#39;svmRadial&#39;</span>,</span>
-<span id="cb11-34"><a href="#cb11-34" aria-hidden="true" tabindex="-1"></a>             <span class="at">preProc =</span> <span class="fu">c</span>(<span class="st">&#39;center&#39;</span>, <span class="st">&#39;scale&#39;</span>),</span>
-<span id="cb11-35"><a href="#cb11-35" aria-hidden="true" tabindex="-1"></a>             <span class="at">tuneLength =</span> <span class="dv">8</span>,</span>
-<span id="cb11-36"><a href="#cb11-36" aria-hidden="true" tabindex="-1"></a>             <span class="at">trControl =</span> <span class="fu">trainControl</span>(<span class="at">method =</span> <span class="st">&#39;cv&#39;</span>)</span>
-<span id="cb11-37"><a href="#cb11-37" aria-hidden="true" tabindex="-1"></a>             )</span>
-<span id="cb11-38"><a href="#cb11-38" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-39"><a href="#cb11-39" aria-hidden="true" tabindex="-1"></a>mark_2 <span class="ot">&lt;-</span> <span class="fu">Sys.time</span>()</span>
-<span id="cb11-40"><a href="#cb11-40" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-41"><a href="#cb11-41" aria-hidden="true" tabindex="-1"></a><span class="co"># knn classifier</span></span>
-<span id="cb11-42"><a href="#cb11-42" aria-hidden="true" tabindex="-1"></a>knn <span class="ot">&lt;-</span> <span class="fu">train</span>(label <span class="sc">~</span> .,</span>
-<span id="cb11-43"><a href="#cb11-43" aria-hidden="true" tabindex="-1"></a>             <span class="at">data =</span> train3,</span>
-<span id="cb11-44"><a href="#cb11-44" aria-hidden="true" tabindex="-1"></a>             <span class="at">method =</span> <span class="st">&quot;knn&quot;</span>,</span>
-<span id="cb11-45"><a href="#cb11-45" aria-hidden="true" tabindex="-1"></a>             <span class="at">preProc =</span> <span class="fu">c</span>(<span class="st">&quot;center&quot;</span>, <span class="st">&quot;scale&quot;</span>),</span>
-<span id="cb11-46"><a href="#cb11-46" aria-hidden="true" tabindex="-1"></a>             <span class="at">tuneLength =</span> <span class="dv">10</span>,</span>
-<span id="cb11-47"><a href="#cb11-47" aria-hidden="true" tabindex="-1"></a>             <span class="at">trControl =</span> ctrl</span>
-<span id="cb11-48"><a href="#cb11-48" aria-hidden="true" tabindex="-1"></a>             )</span>
-<span id="cb11-49"><a href="#cb11-49" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-50"><a href="#cb11-50" aria-hidden="true" tabindex="-1"></a>mark_3 <span class="ot">&lt;-</span> <span class="fu">Sys.time</span>()</span>
-<span id="cb11-51"><a href="#cb11-51" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb11-52"><a href="#cb11-52" aria-hidden="true" tabindex="-1"></a><span class="co"># multinomial regression</span></span>
-<span id="cb11-53"><a href="#cb11-53" aria-hidden="true" tabindex="-1"></a>multinom <span class="ot">&lt;-</span> <span class="fu">train</span>(label <span class="sc">~</span> .,</span>
-<span id="cb11-54"><a href="#cb11-54" aria-hidden="true" tabindex="-1"></a>                  <span class="at">data =</span> train3,</span>
-<span id="cb11-55"><a href="#cb11-55" aria-hidden="true" tabindex="-1"></a>                  <span class="at">method =</span> <span class="st">&#39;multinom&#39;</span>,</span>
-<span id="cb11-56"><a href="#cb11-56" aria-hidden="true" tabindex="-1"></a>                  <span class="at">tuneLength =</span> <span class="dv">8</span>,</span>
-<span id="cb11-57"><a href="#cb11-57" aria-hidden="true" tabindex="-1"></a>                  <span class="at">trControl =</span> ctrl</span>
-<span id="cb11-58"><a href="#cb11-58" aria-hidden="true" tabindex="-1"></a>                  )</span></code></pre></div>
-<pre><code>## # weights:  860 (765 variable)
-## initial  value 20783.133049 
-## iter  10 value 10398.316408
-## iter  20 value 7774.993427
-## iter  30 value 6129.482606
-## iter  40 value 5026.630601
-## iter  50 value 4237.578076
-## iter  60 value 3949.823560
-## iter  70 value 3797.949714
-## iter  80 value 3710.166782
-## iter  90 value 3648.401426
-## iter 100 value 3605.302642
-## final  value 3605.302642 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20783.133049 
-## iter  10 value 10405.948768
-## iter  20 value 7835.728544
-## iter  30 value 6285.252154
-## iter  40 value 5377.486498
-## iter  50 value 4740.845144
-## iter  60 value 4567.287385
-## iter  70 value 4469.252486
-## iter  80 value 4419.110498
-## iter  90 value 4375.536472
-## iter 100 value 4356.052378
-## final  value 4356.052378 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20783.133049 
-## iter  10 value 10400.730932
-## iter  20 value 7794.347740
-## iter  30 value 6180.268272
-## iter  40 value 5156.072335
-## iter  50 value 4445.266164
-## iter  60 value 4298.708180
-## iter  70 value 4151.774536
-## iter  80 value 4090.133104
-## iter  90 value 4047.470314
-## iter 100 value 4021.944241
-## final  value 4021.944241 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20783.133049 
-## iter  10 value 10399.080044
-## iter  20 value 7781.128554
-## iter  30 value 6145.703228
-## iter  40 value 5069.204379
-## iter  50 value 4311.272404
-## iter  60 value 4096.637577
-## iter  70 value 3959.513033
-## iter  80 value 3895.150543
-## iter  90 value 3850.324251
-## iter 100 value 3823.277615
-## final  value 3823.277615 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20783.133049 
-## iter  10 value 10398.557901
-## iter  20 value 7776.934998
-## iter  30 value 6134.628386
-## iter  40 value 5040.244002
-## iter  50 value 4261.856753
-## iter  60 value 4018.434102
-## iter  70 value 3860.371368
-## iter  80 value 3785.724325
-## iter  90 value 3736.761670
-## iter 100 value 3707.388715
-## final  value 3707.388715 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20783.133049 
-## iter  10 value 10398.392776
-## iter  20 value 7775.607553
-## iter  30 value 6131.111491
-## iter  40 value 5030.950082
-## iter  50 value 4245.359098
-## iter  60 value 3992.779609
-## iter  70 value 3821.152980
-## iter  80 value 3735.458111
-## iter  90 value 3681.436179
-## iter 100 value 3645.764027
-## final  value 3645.764027 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20783.133049 
-## iter  10 value 10398.340558
-## iter  20 value 7775.187645
-## iter  30 value 6129.997870
-## iter  40 value 5027.997980
-## iter  50 value 4240.049193
-## iter  60 value 3954.865191
-## iter  70 value 3804.476531
-## iter  80 value 3718.706671
-## iter  90 value 3659.296038
-## iter 100 value 3618.992248
-## final  value 3618.992248 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20783.133049 
-## iter  10 value 10398.324045
-## iter  20 value 7775.054846
-## iter  30 value 6129.645563
-## iter  40 value 5027.063148
-## iter  50 value 4238.360572
-## iter  60 value 3951.424021
-## iter  70 value 3800.029885
-## iter  80 value 3712.903376
-## iter  90 value 3651.918672
-## iter 100 value 3609.770754
-## final  value 3609.770754 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20787.738220 
-## iter  10 value 10470.894720
-## iter  20 value 7990.226373
-## iter  30 value 6095.551560
-## iter  40 value 5194.288168
-## iter  50 value 4293.135091
-## iter  60 value 4010.445723
-## iter  70 value 3833.840632
-## iter  80 value 3739.159142
-## iter  90 value 3683.384247
-## iter 100 value 3637.123187
-## final  value 3637.123187 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20787.738220 
-## iter  10 value 10481.162779
-## iter  20 value 7868.553303
-## iter  30 value 6426.360313
-## iter  40 value 5434.904247
-## iter  50 value 4721.799502
-## iter  60 value 4557.433435
-## iter  70 value 4459.838732
-## iter  80 value 4414.468115
-## iter  90 value 4380.508228
-## iter 100 value 4363.345308
-## final  value 4363.345308 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20787.738220 
-## iter  10 value 10474.142161
-## iter  20 value 8019.859672
-## iter  30 value 6172.421534
-## iter  40 value 5233.839795
-## iter  50 value 4464.743099
-## iter  60 value 4262.577224
-## iter  70 value 4156.366156
-## iter  80 value 4103.223762
-## iter  90 value 4068.294809
-## iter 100 value 4042.067800
-## final  value 4042.067800 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20787.738220 
-## iter  10 value 10471.921690
-## iter  20 value 7999.549542
-## iter  30 value 6120.079526
-## iter  40 value 5221.927546
-## iter  50 value 4348.246867
-## iter  60 value 4136.758437
-## iter  70 value 3975.352794
-## iter  80 value 3915.241834
-## iter  90 value 3873.425974
-## iter 100 value 3845.169053
-## final  value 3845.169053 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20787.738220 
-## iter  10 value 10471.219480
-## iter  20 value 7993.169766
-## iter  30 value 6103.330544
-## iter  40 value 5138.185201
-## iter  50 value 4284.078445
-## iter  60 value 4090.553891
-## iter  70 value 3890.413568
-## iter  80 value 3813.990841
-## iter  90 value 3766.368051
-## iter 100 value 3731.685544
-## final  value 3731.685544 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20787.738220 
-## iter  10 value 10470.997419
-## iter  20 value 7991.156668
-## iter  30 value 6098.013768
-## iter  40 value 5265.398153
-## iter  50 value 4276.019151
-## iter  60 value 4010.698295
-## iter  70 value 3846.049818
-## iter  80 value 3766.330304
-## iter  90 value 3712.870989
-## iter 100 value 3672.835617
-## final  value 3672.835617 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20787.738220 
-## iter  10 value 10470.927196
-## iter  20 value 7990.520509
-## iter  30 value 6096.330407
-## iter  40 value 5192.039438
-## iter  50 value 4295.191337
-## iter  60 value 4014.992558
-## iter  70 value 3840.266196
-## iter  80 value 3747.784567
-## iter  90 value 3693.328815
-## iter 100 value 3649.672968
-## final  value 3649.672968 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20787.738220 
-## iter  10 value 10470.904990
-## iter  20 value 7990.319382
-## iter  30 value 6095.797876
-## iter  40 value 5193.476290
-## iter  50 value 4293.798094
-## iter  60 value 4011.882732
-## iter  70 value 3835.881634
-## iter  80 value 3741.907653
-## iter  90 value 3686.622271
-## iter 100 value 3641.241647
-## final  value 3641.241647 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20783.133049 
-## iter  10 value 10385.057224
-## iter  20 value 7846.244569
-## iter  30 value 6177.968590
-## iter  40 value 5152.866456
-## iter  50 value 4255.766191
-## iter  60 value 3932.916189
-## iter  70 value 3800.309326
-## iter  80 value 3721.084784
-## iter  90 value 3658.073435
-## iter 100 value 3618.364130
-## final  value 3618.364130 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20783.133049 
-## iter  10 value 10392.732282
-## iter  20 value 7885.226030
-## iter  30 value 6325.410100
-## iter  40 value 5472.480588
-## iter  50 value 4757.996344
-## iter  60 value 4577.488003
-## iter  70 value 4479.976621
-## iter  80 value 4427.384059
-## iter  90 value 4393.849094
-## iter 100 value 4371.243553
-## final  value 4371.243553 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20783.133049 
-## iter  10 value 10387.485560
-## iter  20 value 7858.609228
-## iter  30 value 6227.474874
-## iter  40 value 5268.523483
-## iter  50 value 4467.211626
-## iter  60 value 4266.271532
-## iter  70 value 4160.451038
-## iter  80 value 4095.251774
-## iter  90 value 4059.948194
-## iter 100 value 4037.098662
-## final  value 4037.098662 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20783.133049 
-## iter  10 value 10385.825259
-## iter  20 value 7850.158388
-## iter  30 value 6193.935556
-## iter  40 value 5192.053701
-## iter  50 value 4334.472923
-## iter  60 value 4079.382630
-## iter  70 value 3964.051983
-## iter  80 value 3903.673953
-## iter  90 value 3859.576053
-## iter 100 value 3834.099432
-## final  value 3834.099432 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20783.133049 
-## iter  10 value 10385.300111
-## iter  20 value 7847.482604
-## iter  30 value 6183.049579
-## iter  40 value 5165.595789
-## iter  50 value 4280.104621
-## iter  60 value 3979.713629
-## iter  70 value 3857.843948
-## iter  80 value 3791.193889
-## iter  90 value 3742.861654
-## iter 100 value 3715.600372
-## final  value 3715.600372 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20783.133049 
-## iter  10 value 10385.134033
-## iter  20 value 7846.636108
-## iter  30 value 6179.578537
-## iter  40 value 5156.928219
-## iter  50 value 4263.562417
-## iter  60 value 3955.008120
-## iter  70 value 3821.216107
-## iter  80 value 3746.787023
-## iter  90 value 3690.251555
-## iter 100 value 3656.385135
-## final  value 3656.385135 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20783.133049 
-## iter  10 value 10385.081514
-## iter  20 value 7846.368388
-## iter  30 value 6178.478021
-## iter  40 value 5154.154622
-## iter  50 value 4258.241767
-## iter  60 value 3940.000411
-## iter  70 value 3806.689027
-## iter  80 value 3729.663772
-## iter  90 value 3669.092197
-## iter 100 value 3631.236913
-## final  value 3631.236913 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20783.133049 
-## iter  10 value 10385.064905
-## iter  20 value 7846.283725
-## iter  30 value 6178.129718
-## iter  40 value 5153.274185
-## iter  50 value 4256.550063
-## iter  60 value 3935.165401
-## iter  70 value 3802.308621
-## iter  80 value 3723.850459
-## iter  90 value 3661.710438
-## iter 100 value 3622.561284
-## final  value 3622.561284 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20787.738220 
-## iter  10 value 10359.149409
-## iter  20 value 7763.884682
-## iter  30 value 6042.626142
-## iter  40 value 5021.620047
-## iter  50 value 4303.529060
-## iter  60 value 4084.000092
-## iter  70 value 3854.770942
-## iter  80 value 3770.205181
-## iter  90 value 3716.555186
-## iter 100 value 3675.640639
-## final  value 3675.640639 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20787.738220 
-## iter  10 value 10367.353532
-## iter  20 value 7837.068796
-## iter  30 value 6255.553993
-## iter  40 value 5407.924488
-## iter  50 value 4768.022480
-## iter  60 value 4608.084753
-## iter  70 value 4491.146907
-## iter  80 value 4449.226432
-## iter  90 value 4416.985867
-## iter 100 value 4389.817961
-## final  value 4389.817961 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20787.738220 
-## iter  10 value 10361.744751
-## iter  20 value 7786.742235
-## iter  30 value 6227.579438
-## iter  40 value 5201.550692
-## iter  50 value 4518.476792
-## iter  60 value 4312.790766
-## iter  70 value 4184.271770
-## iter  80 value 4131.826071
-## iter  90 value 4093.101986
-## iter 100 value 4070.243753
-## final  value 4070.243753 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20787.738220 
-## iter  10 value 10359.970225
-## iter  20 value 7771.082053
-## iter  30 value 6189.800943
-## iter  40 value 5117.546333
-## iter  50 value 4381.826260
-## iter  60 value 4144.216765
-## iter  70 value 3997.330123
-## iter  80 value 3940.449202
-## iter  90 value 3900.338908
-## iter 100 value 3874.755515
-## final  value 3874.755515 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20787.738220 
-## iter  10 value 10359.408984
-## iter  20 value 7766.157551
-## iter  30 value 6050.279128
-## iter  40 value 5135.390863
-## iter  50 value 4313.737577
-## iter  60 value 4050.596320
-## iter  70 value 3893.648727
-## iter  80 value 3832.914091
-## iter  90 value 3791.078867
-## iter 100 value 3763.479051
-## final  value 3763.479051 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20787.738220 
-## iter  10 value 10359.231495
-## iter  20 value 7764.603111
-## iter  30 value 6045.067822
-## iter  40 value 5001.936961
-## iter  50 value 4310.359802
-## iter  60 value 4036.944573
-## iter  70 value 3858.758439
-## iter  80 value 3792.459731
-## iter  90 value 3743.025736
-## iter 100 value 3708.438979
-## final  value 3708.438979 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20787.738220 
-## iter  10 value 10359.175367
-## iter  20 value 7764.111837
-## iter  30 value 6043.399805
-## iter  40 value 5014.610731
-## iter  50 value 4305.306568
-## iter  60 value 4072.411128
-## iter  70 value 3858.183262
-## iter  80 value 3779.329592
-## iter  90 value 3724.947834
-## iter 100 value 3686.530028
-## final  value 3686.530028 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20787.738220 
-## iter  10 value 10359.157618
-## iter  20 value 7763.956512
-## iter  30 value 6042.870930
-## iter  40 value 5019.329082
-## iter  50 value 4304.044224
-## iter  60 value 4086.357542
-## iter  70 value 3857.006727
-## iter  80 value 3773.339783
-## iter  90 value 3719.806685
-## iter 100 value 3679.563587
-## final  value 3679.563587 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20787.738220 
-## iter  10 value 10400.332208
-## iter  20 value 7725.169476
-## iter  30 value 6115.494744
-## iter  40 value 5057.781762
-## iter  50 value 4249.273035
-## iter  60 value 3961.496433
-## iter  70 value 3800.767881
-## iter  80 value 3714.734025
-## iter  90 value 3648.539595
-## iter 100 value 3607.646729
-## final  value 3607.646729 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20787.738220 
-## iter  10 value 10410.685992
-## iter  20 value 7802.006101
-## iter  30 value 6291.233106
-## iter  40 value 5366.833210
-## iter  50 value 4732.798487
-## iter  60 value 4559.172001
-## iter  70 value 4458.547825
-## iter  80 value 4405.920032
-## iter  90 value 4365.031686
-## iter 100 value 4346.202509
-## final  value 4346.202509 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20787.738220 
-## iter  10 value 10403.606359
-## iter  20 value 7749.489017
-## iter  30 value 6167.441842
-## iter  40 value 5223.282843
-## iter  50 value 4459.386714
-## iter  60 value 4243.223466
-## iter  70 value 4141.669212
-## iter  80 value 4078.490594
-## iter  90 value 4041.281817
-## iter 100 value 4015.796729
-## final  value 4015.796729 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20787.738220 
-## iter  10 value 10401.367585
-## iter  20 value 7732.861484
-## iter  30 value 6133.890395
-## iter  40 value 5203.377484
-## iter  50 value 4313.292380
-## iter  60 value 4085.144585
-## iter  70 value 3949.948997
-## iter  80 value 3889.407123
-## iter  90 value 3844.883189
-## iter 100 value 3818.589657
-## final  value 3818.589657 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20787.738220 
-## iter  10 value 10400.659623
-## iter  20 value 7727.602033
-## iter  30 value 6121.537172
-## iter  40 value 5212.905630
-## iter  50 value 4265.798091
-## iter  60 value 3982.377374
-## iter  70 value 3849.798550
-## iter  80 value 3781.726678
-## iter  90 value 3732.845318
-## iter 100 value 3704.779928
-## final  value 3704.779928 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20787.738220 
-## iter  10 value 10400.435746
-## iter  20 value 7725.938730
-## iter  30 value 6117.424442
-## iter  40 value 5060.504566
-## iter  50 value 4257.004083
-## iter  60 value 3972.657969
-## iter  70 value 3818.833292
-## iter  80 value 3738.639225
-## iter  90 value 3680.170281
-## iter 100 value 3644.756231
-## final  value 3644.756231 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20787.738220 
-## iter  10 value 10400.364950
-## iter  20 value 7725.412737
-## iter  30 value 6116.106736
-## iter  40 value 5058.655157
-## iter  50 value 4251.668299
-## iter  60 value 3958.158136
-## iter  70 value 3804.705411
-## iter  80 value 3721.295487
-## iter  90 value 3659.180496
-## iter 100 value 3619.698124
-## final  value 3619.698124 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20787.738220 
-## iter  10 value 10400.342562
-## iter  20 value 7725.246402
-## iter  30 value 6115.688446
-## iter  40 value 5058.059203
-## iter  50 value 4250.025998
-## iter  60 value 3964.208142
-## iter  70 value 3802.949739
-## iter  80 value 3717.453457
-## iter  90 value 3652.155751
-## iter 100 value 3611.953532
-## final  value 3611.953532 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20787.738220 
-## iter  10 value 10386.498172
-## iter  20 value 7646.175284
-## iter  30 value 5941.548494
-## iter  40 value 4971.923166
-## iter  50 value 4265.917919
-## iter  60 value 3987.570700
-## iter  70 value 3827.887402
-## iter  80 value 3746.418290
-## iter  90 value 3686.431789
-## iter 100 value 3645.469682
-## final  value 3645.469682 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20787.738220 
-## iter  10 value 10395.670644
-## iter  20 value 7715.761694
-## iter  30 value 6118.211081
-## iter  40 value 5281.246596
-## iter  50 value 4736.364540
-## iter  60 value 4584.755207
-## iter  70 value 4482.838279
-## iter  80 value 4431.794687
-## iter  90 value 4403.729572
-## iter 100 value 4382.307382
-## final  value 4382.307382 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20787.738220 
-## iter  10 value 10389.398893
-## iter  20 value 7668.610974
-## iter  30 value 5999.903723
-## iter  40 value 5088.878539
-## iter  50 value 4460.707386
-## iter  60 value 4271.045963
-## iter  70 value 4176.485987
-## iter  80 value 4115.763795
-## iter  90 value 4077.860536
-## iter 100 value 4054.686946
-## final  value 4054.686946 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20787.738220 
-## iter  10 value 10387.415474
-## iter  20 value 7653.314771
-## iter  30 value 5960.303063
-## iter  40 value 5040.943305
-## iter  50 value 4334.059128
-## iter  60 value 4099.919384
-## iter  70 value 3984.235111
-## iter  80 value 3922.348969
-## iter  90 value 3882.307582
-## iter 100 value 3855.417718
-## final  value 3855.417718 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20787.738220 
-## iter  10 value 10386.788250
-## iter  20 value 7648.437510
-## iter  30 value 5947.511444
-## iter  40 value 4994.899367
-## iter  50 value 4287.968643
-## iter  60 value 4024.868581
-## iter  70 value 3889.334722
-## iter  80 value 3817.759438
-## iter  90 value 3771.048616
-## iter 100 value 3742.224163
-## final  value 3742.224163 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20787.738220 
-## iter  10 value 10386.589903
-## iter  20 value 7646.891116
-## iter  30 value 5943.437439
-## iter  40 value 4979.286298
-## iter  50 value 4273.015738
-## iter  60 value 3999.399509
-## iter  70 value 3850.172561
-## iter  80 value 3771.393239
-## iter  90 value 3717.705886
-## iter 100 value 3682.851171
-## final  value 3682.851171 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20787.738220 
-## iter  10 value 10386.527180
-## iter  20 value 7646.401695
-## iter  30 value 5942.146163
-## iter  40 value 4974.260406
-## iter  50 value 4268.175586
-## iter  60 value 3991.313676
-## iter  70 value 3835.111009
-## iter  80 value 3754.580425
-## iter  90 value 3696.938822
-## iter 100 value 3658.296449
-## final  value 3658.296449 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20787.738220 
-## iter  10 value 10386.507345
-## iter  20 value 7646.246886
-## iter  30 value 5941.737527
-## iter  40 value 4972.663113
-## iter  50 value 4266.633174
-## iter  60 value 3988.754755
-## iter  70 value 3830.171513
-## iter  80 value 3749.030207
-## iter  90 value 3689.825629
-## iter 100 value 3649.645076
-## final  value 3649.645076 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20783.133049 
-## iter  10 value 10241.853389
-## iter  20 value 7935.811176
-## iter  30 value 6228.198593
-## iter  40 value 5108.646403
-## iter  50 value 4264.268997
-## iter  60 value 4032.512215
-## iter  70 value 3826.833129
-## iter  80 value 3732.878096
-## iter  90 value 3662.123784
-## iter 100 value 3613.823779
-## final  value 3613.823779 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20783.133049 
-## iter  10 value 10249.572968
-## iter  20 value 7978.306887
-## iter  30 value 6386.907990
-## iter  40 value 5333.143730
-## iter  50 value 4736.006235
-## iter  60 value 4567.503702
-## iter  70 value 4471.132873
-## iter  80 value 4419.689336
-## iter  90 value 4381.751851
-## iter 100 value 4362.538357
-## final  value 4362.538357 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20783.133049 
-## iter  10 value 10244.294288
-## iter  20 value 7949.385317
-## iter  30 value 6281.097857
-## iter  40 value 5215.072124
-## iter  50 value 4448.353533
-## iter  60 value 4256.628325
-## iter  70 value 4150.332425
-## iter  80 value 4086.243082
-## iter  90 value 4049.734559
-## iter 100 value 4025.842323
-## final  value 4025.842323 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20783.133049 
-## iter  10 value 10242.625244
-## iter  20 value 7940.117504
-## iter  30 value 6245.215296
-## iter  40 value 5183.325869
-## iter  50 value 4318.834919
-## iter  60 value 4118.864789
-## iter  70 value 3964.066618
-## iter  80 value 3896.991871
-## iter  90 value 3853.429552
-## iter 100 value 3826.480698
-## final  value 3826.480698 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20783.133049 
-## iter  10 value 10242.097469
-## iter  20 value 7937.174345
-## iter  30 value 6233.609181
-## iter  40 value 5118.821329
-## iter  50 value 4289.415953
-## iter  60 value 4023.554665
-## iter  70 value 3877.749723
-## iter  80 value 3800.958001
-## iter  90 value 3745.660793
-## iter 100 value 3713.668551
-## final  value 3713.668551 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20783.133049 
-## iter  10 value 10241.930573
-## iter  20 value 7936.242387
-## iter  30 value 6229.912533
-## iter  40 value 5111.835456
-## iter  50 value 4272.139641
-## iter  60 value 4048.332686
-## iter  70 value 3850.726275
-## iter  80 value 3762.074630
-## iter  90 value 3695.779783
-## iter 100 value 3654.099378
-## final  value 3654.099378 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20783.133049 
-## iter  10 value 10241.877797
-## iter  20 value 7935.947551
-## iter  30 value 6228.740885
-## iter  40 value 5109.652075
-## iter  50 value 4266.753582
-## iter  60 value 4037.992990
-## iter  70 value 3833.846063
-## iter  80 value 3741.482051
-## iter  90 value 3672.745659
-## iter 100 value 3627.334236
-## final  value 3627.334236 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20783.133049 
-## iter  10 value 10241.861107
-## iter  20 value 7935.854303
-## iter  30 value 6228.370110
-## iter  40 value 5108.964147
-## iter  50 value 4265.054385
-## iter  60 value 4034.283108
-## iter  70 value 3829.102546
-## iter  80 value 3735.612176
-## iter  90 value 3665.539732
-## iter 100 value 3618.219813
-## final  value 3618.219813 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20785.435634 
-## iter  10 value 10387.651058
-## iter  20 value 7635.355761
-## iter  30 value 5916.177615
-## iter  40 value 5047.123171
-## iter  50 value 4266.832974
-## iter  60 value 4009.090637
-## iter  70 value 3843.968826
-## iter  80 value 3760.260958
-## iter  90 value 3696.901085
-## iter 100 value 3650.478708
-## final  value 3650.478708 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20785.435634 
-## iter  10 value 10396.276424
-## iter  20 value 7706.037678
-## iter  30 value 6097.968635
-## iter  40 value 5283.788260
-## iter  50 value 4753.368052
-## iter  60 value 4588.655020
-## iter  70 value 4494.526292
-## iter  80 value 4453.940003
-## iter  90 value 4423.636832
-## iter 100 value 4398.391562
-## final  value 4398.391562 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20785.435634 
-## iter  10 value 10390.379230
-## iter  20 value 7658.097524
-## iter  30 value 5976.881523
-## iter  40 value 5113.197570
-## iter  50 value 4476.602096
-## iter  60 value 4296.955123
-## iter  70 value 4194.910763
-## iter  80 value 4135.225044
-## iter  90 value 4097.091870
-## iter 100 value 4068.649980
-## final  value 4068.649980 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20785.435634 
-## iter  10 value 10388.513841
-## iter  20 value 7642.588544
-## iter  30 value 5935.717134
-## iter  40 value 4999.080988
-## iter  50 value 4335.039758
-## iter  60 value 4153.094578
-## iter  70 value 4003.617512
-## iter  80 value 3943.451046
-## iter  90 value 3900.097630
-## iter 100 value 3868.586740
-## final  value 3868.586740 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20785.435634 
-## iter  10 value 10387.923900
-## iter  20 value 7637.647161
-## iter  30 value 5922.391757
-## iter  40 value 5027.042780
-## iter  50 value 4289.410070
-## iter  60 value 4052.032726
-## iter  70 value 3901.735400
-## iter  80 value 3832.452304
-## iter  90 value 3783.741028
-## iter 100 value 3750.892771
-## final  value 3750.892771 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20785.435634 
-## iter  10 value 10387.737339
-## iter  20 value 7636.080787
-## iter  30 value 5918.146248
-## iter  40 value 5042.166672
-## iter  50 value 4274.040891
-## iter  60 value 4023.011719
-## iter  70 value 3863.310591
-## iter  80 value 3785.482581
-## iter  90 value 3728.855831
-## iter 100 value 3689.508250
-## final  value 3689.508250 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20785.435634 
-## iter  10 value 10387.678342
-## iter  20 value 7635.585077
-## iter  30 value 5916.800507
-## iter  40 value 5045.737558
-## iter  50 value 4269.125033
-## iter  60 value 4013.540826
-## iter  70 value 3850.221604
-## iter  80 value 3768.531712
-## iter  90 value 3707.614933
-## iter 100 value 3663.891562
-## final  value 3663.891562 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20785.435634 
-## iter  10 value 10387.659686
-## iter  20 value 7635.428282
-## iter  30 value 5916.374626
-## iter  40 value 5046.704103
-## iter  50 value 4267.559215
-## iter  60 value 4010.503187
-## iter  70 value 3845.960882
-## iter  80 value 3762.908393
-## iter  90 value 3700.341784
-## iter 100 value 3654.837537
-## final  value 3654.837537 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20785.435634 
-## iter  10 value 10504.986276
-## iter  20 value 7317.169690
-## iter  30 value 5828.694034
-## iter  40 value 5065.703253
-## iter  50 value 4256.693650
-## iter  60 value 4009.306415
-## iter  70 value 3829.942671
-## iter  80 value 3745.707545
-## iter  90 value 3683.462056
-## iter 100 value 3641.500348
-## final  value 3641.500348 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20785.435634 
-## iter  10 value 10514.094930
-## iter  20 value 7391.759604
-## iter  30 value 6012.078020
-## iter  40 value 5391.838358
-## iter  50 value 4738.943043
-## iter  60 value 4584.983121
-## iter  70 value 4484.483862
-## iter  80 value 4438.862152
-## iter  90 value 4403.167334
-## iter 100 value 4377.305138
-## final  value 4377.305138 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20785.435634 
-## iter  10 value 10507.867678
-## iter  20 value 7340.953057
-## iter  30 value 5889.170993
-## iter  40 value 5184.004457
-## iter  50 value 4454.945155
-## iter  60 value 4288.501920
-## iter  70 value 4174.633829
-## iter  80 value 4116.546056
-## iter  90 value 4076.802129
-## iter 100 value 4051.226820
-## final  value 4051.226820 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20785.435634 
-## iter  10 value 10505.897554
-## iter  20 value 7324.710463
-## iter  30 value 5848.083757
-## iter  40 value 5104.995661
-## iter  50 value 4326.655682
-## iter  60 value 4130.311635
-## iter  70 value 3981.141806
-## iter  80 value 3923.410985
-## iter  90 value 3880.633698
-## iter 100 value 3853.811335
-## final  value 3853.811335 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20785.435634 
-## iter  10 value 10505.274457
-## iter  20 value 7319.556280
-## iter  30 value 5834.852694
-## iter  40 value 5078.331883
-## iter  50 value 4279.689675
-## iter  60 value 4051.281103
-## iter  70 value 3887.425963
-## iter  80 value 3817.728507
-## iter  90 value 3768.520934
-## iter 100 value 3739.060049
-## final  value 3739.060049 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20785.435634 
-## iter  10 value 10505.077408
-## iter  20 value 7317.924595
-## iter  30 value 5830.644301
-## iter  40 value 5069.717630
-## iter  50 value 4264.058507
-## iter  60 value 4022.982039
-## iter  70 value 3849.720816
-## iter  80 value 3771.178128
-## iter  90 value 3714.761632
-## iter 100 value 3679.288224
-## final  value 3679.288224 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20785.435634 
-## iter  10 value 10505.015094
-## iter  20 value 7317.408432
-## iter  30 value 5829.311036
-## iter  40 value 5066.974813
-## iter  50 value 4259.032103
-## iter  60 value 4013.673045
-## iter  70 value 3836.338027
-## iter  80 value 3754.075892
-## iter  90 value 3693.940056
-## iter 100 value 3654.465155
-## final  value 3654.465155 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20785.435634 
-## iter  10 value 10504.995389
-## iter  20 value 7317.245189
-## iter  30 value 5828.889174
-## iter  40 value 5066.105566
-## iter  50 value 4257.434088
-## iter  60 value 4010.691526
-## iter  70 value 3831.979757
-## iter  80 value 3748.387760
-## iter  90 value 3686.840793
-## iter 100 value 3645.719381
-## final  value 3645.719381 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20783.133049 
-## iter  10 value 10395.892413
-## iter  20 value 7299.035986
-## iter  30 value 5796.777522
-## iter  40 value 4820.661495
-## iter  50 value 4215.069570
-## iter  60 value 3978.631306
-## iter  70 value 3806.362331
-## iter  80 value 3712.293693
-## iter  90 value 3645.182313
-## iter 100 value 3601.057823
-## final  value 3601.057823 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20783.133049 
-## iter  10 value 10405.144471
-## iter  20 value 7368.746298
-## iter  30 value 6007.025694
-## iter  40 value 5338.445836
-## iter  50 value 4698.892322
-## iter  60 value 4565.493880
-## iter  70 value 4476.128004
-## iter  80 value 4418.396875
-## iter  90 value 4381.090095
-## iter 100 value 4353.490213
-## final  value 4353.490213 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20783.133049 
-## iter  10 value 10398.818211
-## iter  20 value 7320.946907
-## iter  30 value 5870.845961
-## iter  40 value 5091.507991
-## iter  50 value 4415.160649
-## iter  60 value 4240.345285
-## iter  70 value 4141.271513
-## iter  80 value 4080.278736
-## iter  90 value 4042.321030
-## iter 100 value 4017.042971
-## final  value 4017.042971 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20783.133049 
-## iter  10 value 10396.817635
-## iter  20 value 7305.952826
-## iter  30 value 5820.904386
-## iter  40 value 4900.683182
-## iter  50 value 4284.964852
-## iter  60 value 4093.984678
-## iter  70 value 3951.558398
-## iter  80 value 3890.666955
-## iter  90 value 3843.693652
-## iter 100 value 3815.770776
-## final  value 3815.770776 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20783.133049 
-## iter  10 value 10396.184995
-## iter  20 value 7301.222127
-## iter  30 value 5804.483467
-## iter  40 value 4835.713072
-## iter  50 value 4237.591981
-## iter  60 value 4009.633139
-## iter  70 value 3848.032533
-## iter  80 value 3777.566303
-## iter  90 value 3726.708963
-## iter 100 value 3697.256146
-## final  value 3697.256146 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20783.133049 
-## iter  10 value 10395.984936
-## iter  20 value 7299.727190
-## iter  30 value 5799.221841
-## iter  40 value 4824.626087
-## iter  50 value 4222.280783
-## iter  60 value 4034.826579
-## iter  70 value 3831.690213
-## iter  80 value 3740.767582
-## iter  90 value 3680.538680
-## iter 100 value 3640.737955
-## final  value 3640.737955 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20783.133049 
-## iter  10 value 10395.921671
-## iter  20 value 7299.254553
-## iter  30 value 5797.551223
-## iter  40 value 4821.837792
-## iter  50 value 4217.361661
-## iter  60 value 3984.998037
-## iter  70 value 3812.716920
-## iter  80 value 3720.823117
-## iter  90 value 3655.612275
-## iter 100 value 3614.028962
-## final  value 3614.028962 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 20783.133049 
-## iter  10 value 10395.901665
-## iter  20 value 7299.105102
-## iter  30 value 5797.022261
-## iter  40 value 4821.025750
-## iter  50 value 4215.795666
-## iter  60 value 3980.640164
-## iter  70 value 3808.394584
-## iter  80 value 3715.027257
-## iter  90 value 3648.550313
-## iter 100 value 3605.280507
-## final  value 3605.280507 
-## stopped after 100 iterations
-## # weights:  860 (765 variable)
-## initial  value 23094.928483 
-## iter  10 value 11262.541039
-## iter  20 value 8688.428074
-## iter  30 value 6942.333560
-## iter  40 value 5880.769033
-## iter  50 value 4845.358107
-## iter  60 value 4579.005123
-## iter  70 value 4446.623498
-## iter  80 value 4377.988144
-## iter  90 value 4327.636958
-## iter 100 value 4292.709838
-## final  value 4292.709838 
-## stopped after 100 iterations</code></pre>
-<div class="sourceCode" id="cb13"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>mark_4 <span class="ot">&lt;-</span> <span class="fu">Sys.time</span>()</span>
-<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a><span class="co"># naive bayes</span></span>
-<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>nb <span class="ot">&lt;-</span> <span class="fu">train</span>(label <span class="sc">~</span> .,</span>
-<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>            <span class="at">data =</span> train3,</span>
-<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a>            <span class="at">method =</span> <span class="st">&#39;naive_bayes&#39;</span>,</span>
-<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a>            <span class="at">tuneLength =</span> <span class="dv">8</span>,</span>
-<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a>            <span class="at">trControl =</span> ctrl</span>
-<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a>            )</span>
-<span id="cb13-10"><a href="#cb13-10" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb13-11"><a href="#cb13-11" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb13-12"><a href="#cb13-12" aria-hidden="true" tabindex="-1"></a>mark_5 <span class="ot">&lt;-</span> <span class="fu">Sys.time</span>()</span></code></pre></div>
+<span id="cb11-15"><a href="#cb11-15" aria-hidden="true" tabindex="-1"></a><span class="co"># create new dataframes using only feature engineering variables</span></span>
+<span id="cb11-16"><a href="#cb11-16" aria-hidden="true" tabindex="-1"></a>test2 <span class="ot">&lt;-</span> <span class="fu">calculate_features</span>(test)</span></code></pre></div>
+<div class="sourceCode" id="cb12"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="co"># use a new training set, about 10k rows</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">101</span>)</span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>trainIndex <span class="ot">&lt;-</span> <span class="fu">createDataPartition</span>(train<span class="sc">$</span>label, <span class="at">p =</span> <span class="fl">0.167</span>, <span class="at">list =</span> F)</span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>train3 <span class="ot">&lt;-</span> train[trainIndex,] <span class="sc">%&gt;%</span></span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">calculate_features</span>()</span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a><span class="co"># 10 fold cross validation</span></span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a>ctrl <span class="ot">&lt;-</span> <span class="fu">trainControl</span>(<span class="at">method =</span> <span class="st">&#39;cv&#39;</span>, <span class="at">number =</span> <span class="dv">10</span>)</span>
+<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-12"><a href="#cb12-12" aria-hidden="true" tabindex="-1"></a><span class="co"># random forest</span></span>
+<span id="cb12-13"><a href="#cb12-13" aria-hidden="true" tabindex="-1"></a>mark_0 <span class="ot">&lt;-</span> <span class="fu">Sys.time</span>()</span>
+<span id="cb12-14"><a href="#cb12-14" aria-hidden="true" tabindex="-1"></a>  </span>
+<span id="cb12-15"><a href="#cb12-15" aria-hidden="true" tabindex="-1"></a>grid <span class="ot">&lt;-</span>  <span class="fu">expand.grid</span>(<span class="at">.mtry =</span> <span class="fu">sqrt</span>(<span class="fu">ncol</span>(train3)))  </span>
+<span id="cb12-16"><a href="#cb12-16" aria-hidden="true" tabindex="-1"></a>rf <span class="ot">&lt;-</span> <span class="fu">train</span>(label <span class="sc">~</span> .,</span>
+<span id="cb12-17"><a href="#cb12-17" aria-hidden="true" tabindex="-1"></a>            <span class="at">data =</span> train3,</span>
+<span id="cb12-18"><a href="#cb12-18" aria-hidden="true" tabindex="-1"></a>            <span class="at">method =</span> <span class="st">&#39;rf&#39;</span>,</span>
+<span id="cb12-19"><a href="#cb12-19" aria-hidden="true" tabindex="-1"></a>            <span class="at">tuneGrid =</span> grid,</span>
+<span id="cb12-20"><a href="#cb12-20" aria-hidden="true" tabindex="-1"></a>            <span class="at">trControl =</span> ctrl</span>
+<span id="cb12-21"><a href="#cb12-21" aria-hidden="true" tabindex="-1"></a>            )</span>
+<span id="cb12-22"><a href="#cb12-22" aria-hidden="true" tabindex="-1"></a>  </span>
+<span id="cb12-23"><a href="#cb12-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-24"><a href="#cb12-24" aria-hidden="true" tabindex="-1"></a>mark_1 <span class="ot">&lt;-</span> <span class="fu">Sys.time</span>()</span>
+<span id="cb12-25"><a href="#cb12-25" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-26"><a href="#cb12-26" aria-hidden="true" tabindex="-1"></a><span class="co"># svm radial </span></span>
+<span id="cb12-27"><a href="#cb12-27" aria-hidden="true" tabindex="-1"></a>svm <span class="ot">&lt;-</span> <span class="fu">train</span>(label <span class="sc">~</span> .,</span>
+<span id="cb12-28"><a href="#cb12-28" aria-hidden="true" tabindex="-1"></a>             <span class="at">data =</span> train3,</span>
+<span id="cb12-29"><a href="#cb12-29" aria-hidden="true" tabindex="-1"></a>             <span class="at">method =</span> <span class="st">&#39;svmRadial&#39;</span>,</span>
+<span id="cb12-30"><a href="#cb12-30" aria-hidden="true" tabindex="-1"></a>             <span class="at">preProc =</span> <span class="fu">c</span>(<span class="st">&#39;center&#39;</span>, <span class="st">&#39;scale&#39;</span>),</span>
+<span id="cb12-31"><a href="#cb12-31" aria-hidden="true" tabindex="-1"></a>             <span class="at">tuneLength =</span> <span class="dv">8</span>,</span>
+<span id="cb12-32"><a href="#cb12-32" aria-hidden="true" tabindex="-1"></a>             <span class="at">trControl =</span> <span class="fu">trainControl</span>(<span class="at">method =</span> <span class="st">&#39;cv&#39;</span>)</span>
+<span id="cb12-33"><a href="#cb12-33" aria-hidden="true" tabindex="-1"></a>             )</span>
+<span id="cb12-34"><a href="#cb12-34" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-35"><a href="#cb12-35" aria-hidden="true" tabindex="-1"></a>mark_2 <span class="ot">&lt;-</span> <span class="fu">Sys.time</span>()</span>
+<span id="cb12-36"><a href="#cb12-36" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-37"><a href="#cb12-37" aria-hidden="true" tabindex="-1"></a><span class="co"># knn classifier</span></span>
+<span id="cb12-38"><a href="#cb12-38" aria-hidden="true" tabindex="-1"></a>knn <span class="ot">&lt;-</span> <span class="fu">train</span>(label <span class="sc">~</span> .,</span>
+<span id="cb12-39"><a href="#cb12-39" aria-hidden="true" tabindex="-1"></a>             <span class="at">data =</span> train3,</span>
+<span id="cb12-40"><a href="#cb12-40" aria-hidden="true" tabindex="-1"></a>             <span class="at">method =</span> <span class="st">&quot;knn&quot;</span>,</span>
+<span id="cb12-41"><a href="#cb12-41" aria-hidden="true" tabindex="-1"></a>             <span class="at">preProc =</span> <span class="fu">c</span>(<span class="st">&quot;center&quot;</span>, <span class="st">&quot;scale&quot;</span>),</span>
+<span id="cb12-42"><a href="#cb12-42" aria-hidden="true" tabindex="-1"></a>             <span class="at">tuneLength =</span> <span class="dv">10</span>,</span>
+<span id="cb12-43"><a href="#cb12-43" aria-hidden="true" tabindex="-1"></a>             <span class="at">trControl =</span> ctrl</span>
+<span id="cb12-44"><a href="#cb12-44" aria-hidden="true" tabindex="-1"></a>             )</span>
+<span id="cb12-45"><a href="#cb12-45" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-46"><a href="#cb12-46" aria-hidden="true" tabindex="-1"></a>mark_3 <span class="ot">&lt;-</span> <span class="fu">Sys.time</span>()</span>
+<span id="cb12-47"><a href="#cb12-47" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-48"><a href="#cb12-48" aria-hidden="true" tabindex="-1"></a><span class="co"># multinomial regression</span></span>
+<span id="cb12-49"><a href="#cb12-49" aria-hidden="true" tabindex="-1"></a>multinom <span class="ot">&lt;-</span> <span class="fu">train</span>(label <span class="sc">~</span> .,</span>
+<span id="cb12-50"><a href="#cb12-50" aria-hidden="true" tabindex="-1"></a>                  <span class="at">data =</span> train3,</span>
+<span id="cb12-51"><a href="#cb12-51" aria-hidden="true" tabindex="-1"></a>                  <span class="at">method =</span> <span class="st">&#39;multinom&#39;</span>,</span>
+<span id="cb12-52"><a href="#cb12-52" aria-hidden="true" tabindex="-1"></a>                  <span class="at">tuneLength =</span> <span class="dv">8</span>,</span>
+<span id="cb12-53"><a href="#cb12-53" aria-hidden="true" tabindex="-1"></a>                  <span class="at">trControl =</span> ctrl</span>
+<span id="cb12-54"><a href="#cb12-54" aria-hidden="true" tabindex="-1"></a>                  )</span>
+<span id="cb12-55"><a href="#cb12-55" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-56"><a href="#cb12-56" aria-hidden="true" tabindex="-1"></a>mark_4 <span class="ot">&lt;-</span> <span class="fu">Sys.time</span>()</span>
+<span id="cb12-57"><a href="#cb12-57" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-58"><a href="#cb12-58" aria-hidden="true" tabindex="-1"></a><span class="co"># naive bayes</span></span>
+<span id="cb12-59"><a href="#cb12-59" aria-hidden="true" tabindex="-1"></a>nb <span class="ot">&lt;-</span> <span class="fu">train</span>(label <span class="sc">~</span> .,</span>
+<span id="cb12-60"><a href="#cb12-60" aria-hidden="true" tabindex="-1"></a>            <span class="at">data =</span> train3,</span>
+<span id="cb12-61"><a href="#cb12-61" aria-hidden="true" tabindex="-1"></a>            <span class="at">method =</span> <span class="st">&#39;naive_bayes&#39;</span>,</span>
+<span id="cb12-62"><a href="#cb12-62" aria-hidden="true" tabindex="-1"></a>            <span class="at">tuneLength =</span> <span class="dv">8</span>,</span>
+<span id="cb12-63"><a href="#cb12-63" aria-hidden="true" tabindex="-1"></a>            <span class="at">trControl =</span> ctrl</span>
+<span id="cb12-64"><a href="#cb12-64" aria-hidden="true" tabindex="-1"></a>            )</span>
+<span id="cb12-65"><a href="#cb12-65" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-66"><a href="#cb12-66" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-67"><a href="#cb12-67" aria-hidden="true" tabindex="-1"></a>mark_5 <span class="ot">&lt;-</span> <span class="fu">Sys.time</span>()</span>
+<span id="cb12-68"><a href="#cb12-68" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-69"><a href="#cb12-69" aria-hidden="true" tabindex="-1"></a><span class="co"># multinomial regression output test</span></span>
+<span id="cb12-70"><a href="#cb12-70" aria-hidden="true" tabindex="-1"></a>test <span class="ot">&lt;-</span> <span class="fu">train</span>(label <span class="sc">~</span> .,</span>
+<span id="cb12-71"><a href="#cb12-71" aria-hidden="true" tabindex="-1"></a>                  <span class="at">data =</span> train3,</span>
+<span id="cb12-72"><a href="#cb12-72" aria-hidden="true" tabindex="-1"></a>                  <span class="at">method =</span> <span class="st">&#39;multinom&#39;</span>,</span>
+<span id="cb12-73"><a href="#cb12-73" aria-hidden="true" tabindex="-1"></a>                  <span class="at">tuneLength =</span> <span class="dv">8</span>,</span>
+<span id="cb12-74"><a href="#cb12-74" aria-hidden="true" tabindex="-1"></a>                  <span class="at">trControl =</span> ctrl</span>
+<span id="cb12-75"><a href="#cb12-75" aria-hidden="true" tabindex="-1"></a>                  )</span>
+<span id="cb12-76"><a href="#cb12-76" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-77"><a href="#cb12-77" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-78"><a href="#cb12-78" aria-hidden="true" tabindex="-1"></a><span class="co"># save rds</span></span>
+<span id="cb12-79"><a href="#cb12-79" aria-hidden="true" tabindex="-1"></a><span class="fu">saveRDS</span>(rf, <span class="at">file =</span> rf_path)</span>
+<span id="cb12-80"><a href="#cb12-80" aria-hidden="true" tabindex="-1"></a><span class="fu">saveRDS</span>(svm, <span class="at">file =</span> svm_path)</span>
+<span id="cb12-81"><a href="#cb12-81" aria-hidden="true" tabindex="-1"></a><span class="fu">saveRDS</span>(knn, <span class="at">file =</span> knn_path)</span>
+<span id="cb12-82"><a href="#cb12-82" aria-hidden="true" tabindex="-1"></a><span class="fu">saveRDS</span>(multinom, <span class="at">file =</span> multinom_path)</span>
+<span id="cb12-83"><a href="#cb12-83" aria-hidden="true" tabindex="-1"></a><span class="fu">saveRDS</span>(nb, <span class="at">file =</span> nb_path)</span></code></pre></div>
+<div class="sourceCode" id="cb13"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="co"># load rds</span></span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>rf <span class="ot">&lt;-</span> <span class="fu">readRDS</span>(rf_path)</span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>svm <span class="ot">&lt;-</span> <span class="fu">readRDS</span>(svm_path)</span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>knn <span class="ot">&lt;-</span> <span class="fu">readRDS</span>(knn_path)</span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>multinom <span class="ot">&lt;-</span> <span class="fu">readRDS</span>(multinom_path)</span>
+<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a>nb <span class="ot">&lt;-</span> <span class="fu">readRDS</span>(nb_path)</span></code></pre></div>
 <div id="model-training-durations" class="section level3">
 <h3>Model Training Durations</h3>
 <div class="sourceCode" id="cb14"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="co"># calculate durations</span></span>
@@ -2108,23 +1009,30 @@ mark {
 <span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a>nb_dur <span class="ot">&lt;-</span> <span class="fu">difftime</span>(mark_5, mark_4, <span class="at">units =</span> <span class="st">&#39;mins&#39;</span>) <span class="sc">%&gt;%</span> <span class="fu">round</span>(<span class="dv">1</span>)</span>
 <span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a><span class="co"># show all training durations</span></span>
-<span id="cb14-9"><a href="#cb14-9" aria-hidden="true" tabindex="-1"></a><span class="fu">data.frame</span>(</span>
+<span id="cb14-9"><a href="#cb14-9" aria-hidden="true" tabindex="-1"></a>all_dur <span class="ot">&lt;-</span> <span class="fu">data.frame</span>(</span>
 <span id="cb14-10"><a href="#cb14-10" aria-hidden="true" tabindex="-1"></a>  <span class="at">model_type =</span> <span class="fu">c</span>(<span class="st">&#39;Random Forest&#39;</span>, <span class="st">&#39;SVM Radial&#39;</span>, <span class="st">&#39;KNN&#39;</span>, <span class="st">&#39;Multinomial Logisitic Regression&#39;</span>, <span class="st">&#39;Naive Bayes&#39;</span>),</span>
 <span id="cb14-11"><a href="#cb14-11" aria-hidden="true" tabindex="-1"></a>  <span class="at">minutes =</span> <span class="fu">c</span>(rf_dur, svm_dur, knn_dur, mn_dur, nb_dur)</span>
 <span id="cb14-12"><a href="#cb14-12" aria-hidden="true" tabindex="-1"></a>) <span class="sc">%&gt;%</span></span>
-<span id="cb14-13"><a href="#cb14-13" aria-hidden="true" tabindex="-1"></a>  <span class="fu">arrange</span>(<span class="fu">desc</span>(minutes))</span></code></pre></div>
-<pre><code>##                         model_type   minutes
-## 1                       SVM Radial 19.0 mins
-## 2 Multinomial Logisitic Regression  9.3 mins
-## 3                    Random Forest  5.5 mins
-## 4                              KNN  2.6 mins
-## 5                      Naive Bayes  0.2 mins</code></pre>
+<span id="cb14-13"><a href="#cb14-13" aria-hidden="true" tabindex="-1"></a>  <span class="fu">arrange</span>(<span class="fu">desc</span>(minutes))</span>
+<span id="cb14-14"><a href="#cb14-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-15"><a href="#cb14-15" aria-hidden="true" tabindex="-1"></a>all_dur</span>
+<span id="cb14-16"><a href="#cb14-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-17"><a href="#cb14-17" aria-hidden="true" tabindex="-1"></a><span class="fu">write.csv</span>(all_dur, duration_path, <span class="at">row.names =</span> F)</span></code></pre></div>
+<div class="sourceCode" id="cb15"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>all_dur <span class="ot">&lt;-</span> <span class="fu">read.csv</span>(duration_path)</span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>all_dur</span></code></pre></div>
+<pre><code>##                         model_type minutes
+## 1                       SVM Radial    18.4
+## 2 Multinomial Logisitic Regression     9.1
+## 3                    Random Forest     5.3
+## 4                              KNN     2.5
+## 5                      Naive Bayes     0.2</code></pre>
 </div>
 <div id="resample-models" class="section level3">
 <h3>Resample Models</h3>
-<div class="sourceCode" id="cb16"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="co"># resampling  results</span></span>
-<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>rs <span class="ot">&lt;-</span> <span class="fu">resamples</span>(<span class="fu">list</span>(<span class="at">rf =</span> rf, <span class="at">svm =</span> svm, <span class="at">knn =</span> knn, <span class="at">multinomial =</span> multinom, <span class="at">naive_bayes =</span> nb))</span>
-<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a><span class="fu">summary</span>(rs)</span></code></pre></div>
+<div class="sourceCode" id="cb17"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="co"># resampling  results</span></span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a>rs <span class="ot">&lt;-</span> <span class="fu">resamples</span>(<span class="fu">list</span>(<span class="at">rf =</span> rf, <span class="at">svm =</span> svm, <span class="at">knn =</span> knn, <span class="at">multinomial =</span> multinom, <span class="at">naive_bayes =</span> nb))</span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a><span class="fu">summary</span>(rs)</span></code></pre></div>
 <pre><code>## 
 ## Call:
 ## summary.resamples(object = rs)
@@ -2148,38 +1056,38 @@ mark {
 ## multinomial 0.7981815 0.8007464 0.8112138 0.8102383 0.8187884 0.8214679    0
 ## naive_bayes 0.6687861 0.6770715 0.6834892 0.6832878 0.6909125 0.6994767    0</code></pre>
 <p>Based on the results above, SVM looks to be the most accurate model.</p>
-<div class="sourceCode" id="cb18"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>test2<span class="sc">$</span>rf <span class="ot">&lt;-</span> <span class="fu">predict</span>(rf, test2)</span>
-<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a>test2<span class="sc">$</span>svm <span class="ot">&lt;-</span> <span class="fu">predict</span>(svm, test2)</span>
-<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a>test2<span class="sc">$</span>knn <span class="ot">&lt;-</span> <span class="fu">predict</span>(knn, test2)</span>
-<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a>test2<span class="sc">$</span>mn <span class="ot">&lt;-</span> <span class="fu">predict</span>(multinom, test2)</span>
-<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a>test2<span class="sc">$</span>nb <span class="ot">&lt;-</span> <span class="fu">predict</span>(nb, test2)</span>
-<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a>rf_acc <span class="ot">&lt;-</span> <span class="fu">sum</span>(test2<span class="sc">$</span>label <span class="sc">==</span> test2<span class="sc">$</span>rf) <span class="sc">/</span> <span class="fu">nrow</span>(test2)</span>
-<span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a>svm_acc <span class="ot">&lt;-</span> <span class="fu">sum</span>(test2<span class="sc">$</span>label <span class="sc">==</span> test2<span class="sc">$</span>svm) <span class="sc">/</span> <span class="fu">nrow</span>(test2)</span>
-<span id="cb18-9"><a href="#cb18-9" aria-hidden="true" tabindex="-1"></a>knn_acc <span class="ot">&lt;-</span> <span class="fu">sum</span>(test2<span class="sc">$</span>label <span class="sc">==</span> test2<span class="sc">$</span>knn) <span class="sc">/</span> <span class="fu">nrow</span>(test2)</span>
-<span id="cb18-10"><a href="#cb18-10" aria-hidden="true" tabindex="-1"></a>mn_acc <span class="ot">&lt;-</span> <span class="fu">sum</span>(test2<span class="sc">$</span>label <span class="sc">==</span> test2<span class="sc">$</span>mn) <span class="sc">/</span> <span class="fu">nrow</span>(test2)</span>
-<span id="cb18-11"><a href="#cb18-11" aria-hidden="true" tabindex="-1"></a>nb_acc <span class="ot">&lt;-</span> <span class="fu">sum</span>(test2<span class="sc">$</span>label <span class="sc">==</span> test2<span class="sc">$</span>nb) <span class="sc">/</span> <span class="fu">nrow</span>(test2)</span>
-<span id="cb18-12"><a href="#cb18-12" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-13"><a href="#cb18-13" aria-hidden="true" tabindex="-1"></a><span class="co"># show accuracy</span></span>
-<span id="cb18-14"><a href="#cb18-14" aria-hidden="true" tabindex="-1"></a><span class="fu">data.frame</span>(</span>
-<span id="cb18-15"><a href="#cb18-15" aria-hidden="true" tabindex="-1"></a>  <span class="at">model_type =</span> <span class="fu">c</span>(<span class="st">&#39;Random Forest&#39;</span>, <span class="st">&#39;SVM Radial&#39;</span>, <span class="st">&#39;KNN&#39;</span>, <span class="st">&#39;Multinomial Logisitic Regression&#39;</span>, <span class="st">&#39;Naive Bayes&#39;</span>),</span>
-<span id="cb18-16"><a href="#cb18-16" aria-hidden="true" tabindex="-1"></a>  <span class="at">accuracy =</span> <span class="fu">c</span>(rf_acc, svm_acc, knn_acc, mn_acc, nb_acc)</span>
-<span id="cb18-17"><a href="#cb18-17" aria-hidden="true" tabindex="-1"></a>) <span class="sc">%&gt;%</span></span>
-<span id="cb18-18"><a href="#cb18-18" aria-hidden="true" tabindex="-1"></a>  <span class="fu">arrange</span>(<span class="fu">desc</span>(accuracy))</span></code></pre></div>
+<div class="sourceCode" id="cb19"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>test2<span class="sc">$</span>rf <span class="ot">&lt;-</span> <span class="fu">predict</span>(rf, test2)</span>
+<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a>test2<span class="sc">$</span>svm <span class="ot">&lt;-</span> <span class="fu">predict</span>(svm, test2)</span>
+<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a>test2<span class="sc">$</span>knn <span class="ot">&lt;-</span> <span class="fu">predict</span>(knn, test2)</span>
+<span id="cb19-4"><a href="#cb19-4" aria-hidden="true" tabindex="-1"></a>test2<span class="sc">$</span>mn <span class="ot">&lt;-</span> <span class="fu">predict</span>(multinom, test2)</span>
+<span id="cb19-5"><a href="#cb19-5" aria-hidden="true" tabindex="-1"></a>test2<span class="sc">$</span>nb <span class="ot">&lt;-</span> <span class="fu">predict</span>(nb, test2)</span>
+<span id="cb19-6"><a href="#cb19-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb19-7"><a href="#cb19-7" aria-hidden="true" tabindex="-1"></a>rf_acc <span class="ot">&lt;-</span> <span class="fu">sum</span>(test2<span class="sc">$</span>label <span class="sc">==</span> test2<span class="sc">$</span>rf) <span class="sc">/</span> <span class="fu">nrow</span>(test2)</span>
+<span id="cb19-8"><a href="#cb19-8" aria-hidden="true" tabindex="-1"></a>svm_acc <span class="ot">&lt;-</span> <span class="fu">sum</span>(test2<span class="sc">$</span>label <span class="sc">==</span> test2<span class="sc">$</span>svm) <span class="sc">/</span> <span class="fu">nrow</span>(test2)</span>
+<span id="cb19-9"><a href="#cb19-9" aria-hidden="true" tabindex="-1"></a>knn_acc <span class="ot">&lt;-</span> <span class="fu">sum</span>(test2<span class="sc">$</span>label <span class="sc">==</span> test2<span class="sc">$</span>knn) <span class="sc">/</span> <span class="fu">nrow</span>(test2)</span>
+<span id="cb19-10"><a href="#cb19-10" aria-hidden="true" tabindex="-1"></a>mn_acc <span class="ot">&lt;-</span> <span class="fu">sum</span>(test2<span class="sc">$</span>label <span class="sc">==</span> test2<span class="sc">$</span>mn) <span class="sc">/</span> <span class="fu">nrow</span>(test2)</span>
+<span id="cb19-11"><a href="#cb19-11" aria-hidden="true" tabindex="-1"></a>nb_acc <span class="ot">&lt;-</span> <span class="fu">sum</span>(test2<span class="sc">$</span>label <span class="sc">==</span> test2<span class="sc">$</span>nb) <span class="sc">/</span> <span class="fu">nrow</span>(test2)</span>
+<span id="cb19-12"><a href="#cb19-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb19-13"><a href="#cb19-13" aria-hidden="true" tabindex="-1"></a><span class="co"># show accuracy</span></span>
+<span id="cb19-14"><a href="#cb19-14" aria-hidden="true" tabindex="-1"></a><span class="fu">data.frame</span>(</span>
+<span id="cb19-15"><a href="#cb19-15" aria-hidden="true" tabindex="-1"></a>  <span class="at">model_type =</span> <span class="fu">c</span>(<span class="st">&#39;Random Forest&#39;</span>, <span class="st">&#39;SVM Radial&#39;</span>, <span class="st">&#39;KNN&#39;</span>, <span class="st">&#39;Multinomial Logisitic Regression&#39;</span>, <span class="st">&#39;Naive Bayes&#39;</span>),</span>
+<span id="cb19-16"><a href="#cb19-16" aria-hidden="true" tabindex="-1"></a>  <span class="at">accuracy =</span> <span class="fu">c</span>(rf_acc, svm_acc, knn_acc, mn_acc, nb_acc)</span>
+<span id="cb19-17"><a href="#cb19-17" aria-hidden="true" tabindex="-1"></a>) <span class="sc">%&gt;%</span></span>
+<span id="cb19-18"><a href="#cb19-18" aria-hidden="true" tabindex="-1"></a>  <span class="fu">arrange</span>(<span class="fu">desc</span>(accuracy))</span></code></pre></div>
 <pre><code>##                         model_type accuracy
 ## 1                       SVM Radial   0.8564
-## 2                    Random Forest   0.8550
+## 2                    Random Forest   0.8549
 ## 3 Multinomial Logisitic Regression   0.8240
-## 4                              KNN   0.7948
+## 4                              KNN   0.7965
 ## 5                      Naive Bayes   0.7134</code></pre>
 <p>After calculating the prediction accuracy on the test set, the support vector machine model using a radial kernel has a minor lead over the random forest model model.</p>
 </div>
 <div id="classification-evaluation" class="section level3">
 <h3>Classification Evaluation</h3>
-<div class="sourceCode" id="cb20"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="co"># confusion matrix for SVM Radial</span></span>
-<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a>cm <span class="ot">&lt;-</span> <span class="fu">confusionMatrix</span>(test2<span class="sc">$</span>svm, test2<span class="sc">$</span>label)</span>
-<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a>cm<span class="sc">$</span>table</span></code></pre></div>
+<div class="sourceCode" id="cb21"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a><span class="co"># confusion matrix for SVM Radial</span></span>
+<span id="cb21-2"><a href="#cb21-2" aria-hidden="true" tabindex="-1"></a>cm <span class="ot">&lt;-</span> <span class="fu">confusionMatrix</span>(test2<span class="sc">$</span>svm, test2<span class="sc">$</span>label)</span>
+<span id="cb21-3"><a href="#cb21-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-4"><a href="#cb21-4" aria-hidden="true" tabindex="-1"></a>cm<span class="sc">$</span>table</span></code></pre></div>
 <pre><code>##              Reference
 ## Prediction    T-shirt/top Trouser Pullover Dress Coat Sandal Shirt Sneaker Bag
 ##   T-shirt/top         824       9       14    32    1      0   167       0   4
@@ -2204,26 +1112,26 @@ mark {
 ##   Sneaker             47
 ##   Bag                  5
 ##   Ankle boot         945</code></pre>
-<p>As expected, the errors in the supervised models trained using only variables summarizing subsections or shapes of the original training data led to specific items of clothing to be confused for others. Similarly shaped items show the most classifications.</p>
+<p>As expected, the errors in the supervised models trained using only variables summarizing subsections or shapes of the original training data led to specific items of clothing to be confused for others. Similarly shaped items show the most misclassifications.</p>
 <p>The SVM model commonly misclassifies pullovers as coats and shirts as t-shirts/tops or pullovers. Additionally, for each of the three types of footwear, the errors predicted by the model are most likely one of other two footwear types.</p>
-<div class="sourceCode" id="cb22"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a><span class="co"># overall accuracy</span></span>
-<span id="cb22-2"><a href="#cb22-2" aria-hidden="true" tabindex="-1"></a>overall_accuracy <span class="ot">&lt;-</span>cm<span class="sc">$</span>overall[<span class="dv">1</span>]</span>
-<span id="cb22-3"><a href="#cb22-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-4"><a href="#cb22-4" aria-hidden="true" tabindex="-1"></a><span class="co"># data frame of results by class</span></span>
-<span id="cb22-5"><a href="#cb22-5" aria-hidden="true" tabindex="-1"></a>byclass <span class="ot">&lt;-</span> cm<span class="sc">$</span>byClass <span class="sc">%&gt;%</span> </span>
-<span id="cb22-6"><a href="#cb22-6" aria-hidden="true" tabindex="-1"></a>  <span class="fu">as.data.frame</span>()</span>
-<span id="cb22-7"><a href="#cb22-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-8"><a href="#cb22-8" aria-hidden="true" tabindex="-1"></a><span class="co"># add in label as variable instead of row name</span></span>
-<span id="cb22-9"><a href="#cb22-9" aria-hidden="true" tabindex="-1"></a>byclass<span class="sc">$</span>label <span class="ot">&lt;-</span> <span class="fu">row.names</span>(byclass) <span class="sc">%&gt;%</span></span>
-<span id="cb22-10"><a href="#cb22-10" aria-hidden="true" tabindex="-1"></a>  <span class="fu">str_replace</span>(<span class="st">&#39;Class: &#39;</span>,<span class="st">&#39;&#39;</span>)</span>
-<span id="cb22-11"><a href="#cb22-11" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb22-12"><a href="#cb22-12" aria-hidden="true" tabindex="-1"></a><span class="co"># plot</span></span>
-<span id="cb22-13"><a href="#cb22-13" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(byclass, <span class="fu">aes</span>(<span class="at">x =</span> <span class="st">`</span><span class="at">Pos Pred Value</span><span class="st">`</span>, <span class="at">y =</span> <span class="fu">reorder</span>(label, <span class="st">`</span><span class="at">Pos Pred Value</span><span class="st">`</span>))) <span class="sc">+</span></span>
-<span id="cb22-14"><a href="#cb22-14" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_col</span>() <span class="sc">+</span></span>
-<span id="cb22-15"><a href="#cb22-15" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_vline</span>(<span class="at">xintercept =</span> overall_accuracy, <span class="at">lty =</span> <span class="dv">2</span>, <span class="at">color =</span> <span class="st">&#39;blue&#39;</span>) <span class="sc">+</span></span>
-<span id="cb22-16"><a href="#cb22-16" aria-hidden="true" tabindex="-1"></a>  <span class="fu">scale_x_continuous</span>(<span class="at">labels =</span> <span class="fu">percent_format</span>(<span class="at">accuracy=</span><span class="dv">1</span>)) <span class="sc">+</span></span>
-<span id="cb22-17"><a href="#cb22-17" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">y =</span> <span class="st">&#39;&#39;</span>, <span class="at">title =</span> <span class="st">&#39;SVM Accuracy by Label&#39;</span>) <span class="sc">+</span></span>
-<span id="cb22-18"><a href="#cb22-18" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme_bw</span>()</span></code></pre></div>
+<div class="sourceCode" id="cb23"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a><span class="co"># overall accuracy</span></span>
+<span id="cb23-2"><a href="#cb23-2" aria-hidden="true" tabindex="-1"></a>overall_accuracy <span class="ot">&lt;-</span>cm<span class="sc">$</span>overall[<span class="dv">1</span>]</span>
+<span id="cb23-3"><a href="#cb23-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-4"><a href="#cb23-4" aria-hidden="true" tabindex="-1"></a><span class="co"># data frame of results by class</span></span>
+<span id="cb23-5"><a href="#cb23-5" aria-hidden="true" tabindex="-1"></a>byclass <span class="ot">&lt;-</span> cm<span class="sc">$</span>byClass <span class="sc">%&gt;%</span> </span>
+<span id="cb23-6"><a href="#cb23-6" aria-hidden="true" tabindex="-1"></a>  <span class="fu">as.data.frame</span>()</span>
+<span id="cb23-7"><a href="#cb23-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-8"><a href="#cb23-8" aria-hidden="true" tabindex="-1"></a><span class="co"># add in label as variable instead of row name</span></span>
+<span id="cb23-9"><a href="#cb23-9" aria-hidden="true" tabindex="-1"></a>byclass<span class="sc">$</span>label <span class="ot">&lt;-</span> <span class="fu">row.names</span>(byclass) <span class="sc">%&gt;%</span></span>
+<span id="cb23-10"><a href="#cb23-10" aria-hidden="true" tabindex="-1"></a>  <span class="fu">str_replace</span>(<span class="st">&#39;Class: &#39;</span>,<span class="st">&#39;&#39;</span>)</span>
+<span id="cb23-11"><a href="#cb23-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb23-12"><a href="#cb23-12" aria-hidden="true" tabindex="-1"></a><span class="co"># plot</span></span>
+<span id="cb23-13"><a href="#cb23-13" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(byclass, <span class="fu">aes</span>(<span class="at">x =</span> <span class="st">`</span><span class="at">Pos Pred Value</span><span class="st">`</span>, <span class="at">y =</span> <span class="fu">reorder</span>(label, <span class="st">`</span><span class="at">Pos Pred Value</span><span class="st">`</span>))) <span class="sc">+</span></span>
+<span id="cb23-14"><a href="#cb23-14" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_col</span>() <span class="sc">+</span></span>
+<span id="cb23-15"><a href="#cb23-15" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_vline</span>(<span class="at">xintercept =</span> overall_accuracy, <span class="at">lty =</span> <span class="dv">2</span>, <span class="at">color =</span> <span class="st">&#39;blue&#39;</span>) <span class="sc">+</span></span>
+<span id="cb23-16"><a href="#cb23-16" aria-hidden="true" tabindex="-1"></a>  <span class="fu">scale_x_continuous</span>(<span class="at">labels =</span> <span class="fu">percent_format</span>(<span class="at">accuracy=</span><span class="dv">1</span>)) <span class="sc">+</span></span>
+<span id="cb23-17"><a href="#cb23-17" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">y =</span> <span class="st">&#39;&#39;</span>, <span class="at">title =</span> <span class="st">&#39;SVM Accuracy by Label&#39;</span>) <span class="sc">+</span></span>
+<span id="cb23-18"><a href="#cb23-18" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme_bw</span>()</span></code></pre></div>
 <p><img src="data:image/png;base64,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" width="960" /></p>
 <p>The above plot shows the model’s accuracy by label, with the blue vertical line representing the overall accuracy. We can see that shirts, pullovers, coats, and T-shirt/tops were the classes that performed the poorest. The similar shapes of the items suggest that the derived variables that were used did not adequately pick up the variance among the items.</p>
 </div>

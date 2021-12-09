@@ -605,11 +605,28 @@ This section uses 10 fold cross validation to train the following models:
 
 The following models will be trained exclusively on the variables created in the earlier feature engineering section. Additionally, the training data will only use a fraction of the original training dataset in order to deal with the hardware limitations of personal computers. The training set used below is a stratified sample and accounts for 16.7% or 10,010 observations of the original training set.
 
+```{r run decision and paths}
 
-```{r training models}
+# this will determine if the models are retrained or if the stored files are referenced
+full_run <- F
+
+# local path where models will be saved and loaded from
+model_path <- 'C:/downloads/docs/data622/final/feature_engineering_models/'
+
+rf_path <- str_c(model_path, 'fe_rf_mod.rds')
+svm_path <- str_c(model_path, 'fe_svm_mod.rds')
+knn_path <- str_c(model_path, 'fe_knn_mod.rds')
+multinom_path <- str_c(model_path, 'fe_multinom_mod.rds')
+nb_path <- str_c(model_path, 'fe_nb_mod.rds')
+
+duration_path <- str_c(model_path, 'fe_run_duration.csv')
+
 # create new dataframes using only feature engineering variables
-# train3 <- calculate_features(train2)
 test2 <- calculate_features(test)
+
+```
+
+```{r training models, results = 'hide', eval = if (full_run) TRUE else FALSE}
 
 # use a new training set, about 10k rows
 set.seed(101)
@@ -679,11 +696,38 @@ nb <- train(label ~ .,
 
 mark_5 <- Sys.time()
 
+# multinomial regression output test
+test <- train(label ~ .,
+                  data = train3,
+                  method = 'multinom',
+                  tuneLength = 8,
+                  trControl = ctrl
+                  )
+
+
+# save rds
+saveRDS(rf, file = rf_path)
+saveRDS(svm, file = svm_path)
+saveRDS(knn, file = knn_path)
+saveRDS(multinom, file = multinom_path)
+saveRDS(nb, file = nb_path)
+
+```
+
+```{r load rds, eval = if (!full_run) TRUE else FALSE}
+
+# load rds
+rf <- readRDS(rf_path)
+svm <- readRDS(svm_path)
+knn <- readRDS(knn_path)
+multinom <- readRDS(multinom_path)
+nb <- readRDS(nb_path)
+
 ```
 
 ### Model Training Durations
 
-```{r training duration}
+```{r training duration, eval = if (full_run) TRUE else FALSE}
 # calculate durations
 rf_dur <- difftime(mark_1, mark_0, units = 'mins') %>% round(1)
 svm_dur <- difftime(mark_2, mark_1, units = 'mins') %>% round(1)
@@ -692,11 +736,23 @@ mn_dur <- difftime(mark_4, mark_3, units = 'mins') %>% round(1)
 nb_dur <- difftime(mark_5, mark_4, units = 'mins') %>% round(1)
 
 # show all training durations
-data.frame(
+all_dur <- data.frame(
   model_type = c('Random Forest', 'SVM Radial', 'KNN', 'Multinomial Logisitic Regression', 'Naive Bayes'),
   minutes = c(rf_dur, svm_dur, knn_dur, mn_dur, nb_dur)
 ) %>%
   arrange(desc(minutes))
+
+all_dur
+
+write.csv(all_dur, duration_path, row.names = F)
+
+```
+
+```{r load durations, eval = if (!full_run) TRUE else FALSE}
+
+all_dur <- read.csv(duration_path)
+
+all_dur
 
 ```
 
@@ -745,7 +801,7 @@ cm <- confusionMatrix(test2$svm, test2$label)
 cm$table
 ```
 
-As expected, the errors in the supervised models trained using only variables summarizing subsections or shapes of the original training data led to specific items of clothing to be confused for others. Similarly shaped items show the most classifications. 
+As expected, the errors in the supervised models trained using only variables summarizing subsections or shapes of the original training data led to specific items of clothing to be confused for others. Similarly shaped items show the most misclassifications. 
 
 The SVM model commonly misclassifies pullovers as coats and shirts as t-shirts/tops or pullovers. Additionally, for each of the three types of footwear, the errors predicted by the model are most likely one of other two footwear types.
 
